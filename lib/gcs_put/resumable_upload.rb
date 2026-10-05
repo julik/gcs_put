@@ -6,7 +6,7 @@
 # since it is the last PUT (with the total size filled in) which closes the GCS object.
 #
 #   gcs_file = bucket.file("upload.bin", skip_lookup: true)
-#   GCSPut::ResumableUpload.from_gcs_file(gcs_file) do |io|
+#   GCSPut.to_gcs_file(gcs_file) do |io|
 #     io.write("Hello resumable")
 #     20.times { io.write(Random.bytes(1024 * 1024)) }
 #   end
@@ -36,12 +36,12 @@ class GCSPut::ResumableUpload
   # @param content_type[String] the content type of the resulting object
   # @param transport[#put, #post, #close] see `GCSPut::Transport`
   # @param signed_url_options[Hash] passed to `gcs_file.signed_url`, see `Signer.url_issuer_and_signer`
-  # @param options[Hash] see `from_session_url`
+  # @param options[Hash] see `to_session_url`
   # @return [GCSPut::ResumableUpload, Integer]
-  def self.from_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk)
+  def self.to_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk)
     signed_url_options = GCSPut::Signer.url_issuer_and_signer.merge(signed_url_options)
     signed_post_url = gcs_file.signed_url(method: "POST", content_type: content_type, headers: {"x-goog-resumable" => "start"}, **signed_url_options)
-    from_signed_post_url(signed_post_url, content_type: content_type, transport: transport, **options, &blk)
+    to_signed_post_url(signed_post_url, content_type: content_type, transport: transport, **options, &blk)
   end
 
   # Starts a session from a signed POST URL (one with `x-goog-resumable: start` among its signed headers)
@@ -51,15 +51,15 @@ class GCSPut::ResumableUpload
   # @param signed_post_url[String]
   # @param content_type[String] must match the content type the URL was signed with
   # @param transport[#put, #post, #close] see `GCSPut::Transport`
-  # @param options[Hash] see `from_session_url`
+  # @param options[Hash] see `to_session_url`
   # @return [GCSPut::ResumableUpload, Integer]
-  def self.from_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk)
+  def self.to_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk)
     response = transport.post(URI(signed_post_url), "", {"Content-Type" => content_type, "x-goog-resumable" => "start"})
     unless response.status == 201
       raise GCSPut::UploadFailed.new("Session start responded with HTTP #{response.status}: #{response.body}", response: response)
     end
     session_url = response["Location"] or raise GCSPut::UploadFailed.new("Session start did not return a Location header", response: response)
-    from_session_url(session_url, content_type: content_type, transport: transport, **options, &blk)
+    to_session_url(session_url, content_type: content_type, transport: transport, **options, &blk)
   end
 
   # Wraps an already started session. With a block, yields the upload, finishes it once
@@ -71,7 +71,7 @@ class GCSPut::ResumableUpload
   # @param max_attempts[Integer] how many times a single chunk may be sent before giving up
   # @param transport[#put, #post, #close] see `GCSPut::Transport`
   # @return [GCSPut::ResumableUpload, Integer]
-  def self.from_session_url(session_url, **options)
+  def self.to_session_url(session_url, **options)
     upload = new(session_url, **options)
     return upload unless block_given?
     yield(upload)
@@ -93,7 +93,9 @@ class GCSPut::ResumableUpload
     @chunker = GCSPut::ByteChunker.new(chunk_size: chunk_size) { |bytes, is_last| upload_chunk(bytes, is_last) }
   end
 
-  # Sends the remaining buffered bytes as the final chunk and closes the GCS object
+  # Sends the remaining buffered bytes as the final chunk and closes the GCS object.
+  # Also available as `close` so that writers which close their underlying IO, like
+  # `Zlib::GzipWriter`, finish the upload for you
   #
   # @return [Integer] the total number of bytes uploaded
   def finish
@@ -104,6 +106,7 @@ class GCSPut::ResumableUpload
   ensure
     @transport.close
   end
+  alias_method :close, :finish
 
   private
 

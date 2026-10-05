@@ -12,7 +12,7 @@ module ResumableUploadChunkTests
   end
 
   def new_io(**options)
-    GCSPut::ResumableUpload.from_session_url(SESSION_URL, transport: transport, **options)
+    GCSPut::ResumableUpload.to_session_url(SESSION_URL, transport: transport, **options)
   end
 
   # Records every PUT and answers with whatever the block decides for it
@@ -220,12 +220,12 @@ class ResumableUploadSessionTest < Minitest::Test
     singleton.send(:define_method, :url_issuer_and_signer, original)
   end
 
-  def test_from_gcs_file_signs_starts_the_session_and_streams_into_it
+  def test_to_gcs_file_signs_starts_the_session_and_streams_into_it
     stub_request(:post, SIGNED_POST_URL).with(headers: {"x-goog-resumable" => "start", "Content-Type" => "text/plain"}).to_return(status: 201, headers: {"Location" => SESSION_URL})
     stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
 
     total = with_signer_options({}) do
-      GCSPut::ResumableUpload.from_gcs_file(gcs_file, content_type: "text/plain") { |io| io.write("hello") }
+      GCSPut::ResumableUpload.to_gcs_file(gcs_file, content_type: "text/plain") { |io| io.write("hello") }
     end
 
     assert_equal 5, total
@@ -233,11 +233,11 @@ class ResumableUploadSessionTest < Minitest::Test
     assert_requested(:put, SESSION_URL, headers: {"Content-Range" => "bytes 0-4/5", "Content-Type" => "text/plain"})
   end
 
-  def test_from_gcs_file_without_a_block_returns_an_upload_to_drive_by_hand
+  def test_to_gcs_file_without_a_block_returns_an_upload_to_drive_by_hand
     stub_request(:post, SIGNED_POST_URL).to_return(status: 201, headers: {"Location" => SESSION_URL})
     stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
 
-    upload = with_signer_options({}) { GCSPut::ResumableUpload.from_gcs_file(gcs_file) }
+    upload = with_signer_options({}) { GCSPut::ResumableUpload.to_gcs_file(gcs_file) }
     assert_equal SESSION_URL, upload.session_url
     assert_equal 0, upload.bytes_persisted
     upload << "hello"
@@ -245,23 +245,23 @@ class ResumableUploadSessionTest < Minitest::Test
     assert_equal 5, upload.bytes_persisted
   end
 
-  def test_from_gcs_file_fails_when_the_session_start_is_refused
+  def test_to_gcs_file_fails_when_the_session_start_is_refused
     stub_request(:post, SIGNED_POST_URL).to_return(status: 403, body: "denied")
 
     err = assert_raises(GCSPut::UploadFailed) do
-      with_signer_options({}) { GCSPut::ResumableUpload.from_gcs_file(gcs_file) }
+      with_signer_options({}) { GCSPut::ResumableUpload.to_gcs_file(gcs_file) }
     end
     assert_match(/HTTP 403/, err.message)
     assert_equal 403, err.response.status
     assert_not_requested(:put, SESSION_URL)
   end
 
-  def test_from_gcs_file_passes_issuer_signer_and_extra_options_through_to_signed_url
+  def test_to_gcs_file_passes_issuer_signer_and_extra_options_through_to_signed_url
     stub_request(:post, SIGNED_POST_URL).to_return(status: 201, headers: {"Location" => SESSION_URL})
     signer = ->(string_to_sign) { "sig" }
 
     with_signer_options({issuer: "sa@example.iam.gserviceaccount.com", signer: signer}) do
-      GCSPut::ResumableUpload.from_gcs_file(gcs_file, signed_url_options: {expires: 300})
+      GCSPut::ResumableUpload.to_gcs_file(gcs_file, signed_url_options: {expires: 300})
     end
 
     options = gcs_file.signed_url_calls.first
@@ -270,64 +270,76 @@ class ResumableUploadSessionTest < Minitest::Test
     assert_equal 300, options[:expires]
   end
 
-  def test_from_gcs_file_uses_the_given_transport_for_both_session_start_and_chunks
+  def test_to_gcs_file_uses_the_given_transport_for_both_session_start_and_chunks
     stub_request(:post, SIGNED_POST_URL).to_return(status: 201, headers: {"Location" => SESSION_URL})
     stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
 
     transport = GCSPut::Transport::Faraday.new
     total = with_signer_options({}) do
-      GCSPut::ResumableUpload.from_gcs_file(gcs_file, transport: transport) { |io| io.write("hello") }
+      GCSPut::ResumableUpload.to_gcs_file(gcs_file, transport: transport) { |io| io.write("hello") }
     end
     assert_equal 5, total
     assert_requested(:post, SIGNED_POST_URL)
     assert_requested(:put, SESSION_URL)
   end
 
-  def test_from_signed_post_url_starts_the_session_and_streams_into_it
+  def test_to_signed_post_url_starts_the_session_and_streams_into_it
     stub_request(:post, SIGNED_POST_URL).with(headers: {"Content-Type" => "text/plain", "x-goog-resumable" => "start"}).to_return(status: 201, headers: {"Location" => SESSION_URL})
     stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
 
-    total = GCSPut::ResumableUpload.from_signed_post_url(SIGNED_POST_URL, content_type: "text/plain") { |io| io.write("hello") }
+    total = GCSPut::ResumableUpload.to_signed_post_url(SIGNED_POST_URL, content_type: "text/plain") { |io| io.write("hello") }
     assert_equal 5, total
     assert_requested(:put, SESSION_URL, headers: {"Content-Range" => "bytes 0-4/5", "Content-Type" => "text/plain"})
   end
 
-  def test_from_signed_post_url_without_a_block_returns_the_upload
+  def test_to_signed_post_url_without_a_block_returns_the_upload
     stub_request(:post, SIGNED_POST_URL).with(headers: {"Content-Type" => "binary/octet-stream", "x-goog-resumable" => "start"}).to_return(status: 201, headers: {"Location" => SESSION_URL})
-    upload = GCSPut::ResumableUpload.from_signed_post_url(SIGNED_POST_URL)
+    upload = GCSPut::ResumableUpload.to_signed_post_url(SIGNED_POST_URL)
     assert_equal SESSION_URL, upload.session_url
     assert_not_requested(:put, SESSION_URL)
   end
 
-  def test_from_session_url_defaults_to_octet_stream_net_http_and_5mb_chunks
+  def test_to_session_url_defaults_to_octet_stream_net_http_and_5mb_chunks
     stub_request(:put, SESSION_URL).with(headers: {"Content-Type" => "binary/octet-stream"}).to_return(status: 200, body: "{}")
-    total = GCSPut::ResumableUpload.from_session_url(SESSION_URL) { |io| io.write("hello") }
+    total = GCSPut::ResumableUpload.to_session_url(SESSION_URL) { |io| io.write("hello") }
     assert_equal 5, total
-    upload = GCSPut::ResumableUpload.from_session_url(SESSION_URL)
+    upload = GCSPut::ResumableUpload.to_session_url(SESSION_URL)
     assert_kind_of GCSPut::Transport::NetHTTP, upload.instance_variable_get(:@transport)
     assert_equal 5 * 1024 * 1024, GCSPut::DEFAULT_CHUNK_SIZE
   end
 
-  def test_from_gcs_file_defaults_to_octet_stream
+  def test_to_gcs_file_defaults_to_octet_stream
     stub_request(:post, SIGNED_POST_URL).with(headers: {"Content-Type" => "binary/octet-stream"}).to_return(status: 201, headers: {"Location" => SESSION_URL})
-    upload = with_signer_options({}) { GCSPut::ResumableUpload.from_gcs_file(gcs_file) }
+    upload = with_signer_options({}) { GCSPut::ResumableUpload.to_gcs_file(gcs_file) }
     assert_equal SESSION_URL, upload.session_url
     assert_equal "binary/octet-stream", gcs_file.signed_url_calls.first[:content_type]
+  end
+
+  def test_close_finishes_so_gzip_writer_can_drive_it
+    stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
+
+    upload = GCSPut.to_session_url(SESSION_URL)
+    gz = Zlib::GzipWriter.new(upload)
+    gz.write("hello")
+    gz.close # closes the upload too
+
+    assert_equal upload.bytes_persisted, upload.finish # already finished, a no-op
+    assert_equal "hello", Zlib.gunzip(WebMock::RequestRegistry.instance.requested_signatures.hash.keys.find { |sig| sig.method == :put }.body)
   end
 
   def test_factories_are_available_on_the_top_level_module
     stub_request(:post, SIGNED_POST_URL).to_return(status: 201, headers: {"Location" => SESSION_URL})
     stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
 
-    assert_equal 5, with_signer_options({}) { GCSPut.from_gcs_file(gcs_file) { |io| io.write("hello") } }
-    assert_equal 5, GCSPut.from_signed_post_url(SIGNED_POST_URL) { |io| io.write("hello") }
-    assert_equal 5, GCSPut.from_session_url(SESSION_URL) { |io| io.write("hello") }
-    assert_kind_of GCSPut::ResumableUpload, GCSPut.from_session_url(SESSION_URL)
+    assert_equal 5, with_signer_options({}) { GCSPut.to_gcs_file(gcs_file) { |io| io.write("hello") } }
+    assert_equal 5, GCSPut.to_signed_post_url(SIGNED_POST_URL) { |io| io.write("hello") }
+    assert_equal 5, GCSPut.to_session_url(SESSION_URL) { |io| io.write("hello") }
+    assert_kind_of GCSPut::ResumableUpload, GCSPut.to_session_url(SESSION_URL)
   end
 
-  def test_from_signed_post_url_fails_without_a_location
+  def test_to_signed_post_url_fails_without_a_location
     stub_request(:post, SIGNED_POST_URL).to_return(status: 201)
-    err = assert_raises(GCSPut::UploadFailed) { GCSPut::ResumableUpload.from_signed_post_url(SIGNED_POST_URL) }
+    err = assert_raises(GCSPut::UploadFailed) { GCSPut::ResumableUpload.to_signed_post_url(SIGNED_POST_URL) }
     assert_match(/Location/, err.message)
   end
 end

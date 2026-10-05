@@ -42,7 +42,7 @@ module GCSPut
   class << self
     extend Forwardable
 
-    def_delegators :"GCSPut::ResumableUpload", :from_gcs_file, :from_signed_post_url, :from_session_url
+    def_delegators :"GCSPut::ResumableUpload", :to_gcs_file, :to_signed_post_url, :to_session_url
   end
 end
 
