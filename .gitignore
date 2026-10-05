@@ -1,0 +1,7 @@
+# Reference code from another project, must not ship
+/tmp/
+/pkg/
+/vendor/bundle/
+/.bundle/
+/Gemfile.lock
+.DS_Store
