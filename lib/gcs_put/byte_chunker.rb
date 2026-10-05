@@ -8,7 +8,7 @@
 #   chunker = ByteChunker.new(chunk_size: 3) { |bytes, is_last| puts [bytes, is_last].inspect }
 #   chunker << "ab" << "cdefg"  # => ["abc", false], ["def", false]
 #   chunker.finish              # => ["g", true]
-class GcsPut::ByteChunker
+class GCSPut::ByteChunker
   # @param chunk_size[Integer] the size that every chunk except the last must have
   # @yield [bytes, is_last] a binary String and whether this is the final chunk
   def initialize(chunk_size:, &delivery_proc)

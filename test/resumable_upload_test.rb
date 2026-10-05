@@ -15,13 +15,13 @@ class ResumableUploadTest < Minitest::Test
   end
 
   def setup
-    @upload = with_signer_options({}) { GcsPut::ResumableUpload.new(fake_file, content_type: "text/plain") }
+    @upload = with_signer_options({}) { GCSPut::ResumableUpload.new(fake_file, content_type: "text/plain") }
   end
 
   # Keeps the test away from the metadata server lookup
   def with_signer_options(options)
-    singleton = GcsPut::Signer.singleton_class
-    original = GcsPut::Signer.method(:url_issuer_and_signer)
+    singleton = GCSPut::Signer.singleton_class
+    original = GCSPut::Signer.method(:url_issuer_and_signer)
     singleton.send(:remove_method, :url_issuer_and_signer)
     singleton.send(:define_method, :url_issuer_and_signer) { options }
     yield
@@ -49,7 +49,7 @@ class ResumableUploadTest < Minitest::Test
   def test_fails_when_the_session_start_is_refused
     stub_request(:post, SIGNED_POST_URL).to_return(status: 403, body: "denied")
 
-    err = assert_raises(GcsPut::UploadFailed) { @upload.stream { |io| io.write("hello") } }
+    err = assert_raises(GCSPut::UploadFailed) { @upload.stream { |io| io.write("hello") } }
     assert_match(/HTTP 403/, err.message)
     assert_equal 403, err.response.status
   end
@@ -58,8 +58,8 @@ class ResumableUploadTest < Minitest::Test
     stub_request(:post, SIGNED_POST_URL).to_return(status: 201, headers: {"Location" => SESSION_URL})
     stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
 
-    transport = GcsPut::Transport::Faraday.new
-    upload = with_signer_options({}) { GcsPut::ResumableUpload.new(fake_file, transport: transport) }
+    transport = GCSPut::Transport::Faraday.new
+    upload = with_signer_options({}) { GCSPut::ResumableUpload.new(fake_file, transport: transport) }
     assert_equal 5, upload.stream { |io| io.write("hello") }
     assert_requested(:post, SIGNED_POST_URL)
     assert_requested(:put, SESSION_URL)
@@ -68,9 +68,9 @@ class ResumableUploadTest < Minitest::Test
   def test_passes_issuer_and_signer_through_to_signed_url
     signer = ->(string_to_sign) { "sig" }
     with_signer_options({issuer: "sa@example.iam.gserviceaccount.com", signer: signer}) do
-      GcsPut::ResumableUpload.new(fake_file, expires: 300).start_session
+      GCSPut::ResumableUpload.new(fake_file, expires: 300).start_session
     end
-  rescue GcsPut::UploadFailed, WebMock::NetConnectNotAllowedError
+  rescue GCSPut::UploadFailed, WebMock::NetConnectNotAllowedError
     # The POST is not stubbed on purpose, we only care about the signed_url options
   ensure
     options = fake_file.signed_url_calls.first

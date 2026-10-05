@@ -4,7 +4,7 @@ require_relative "lib/gcs_put/version"
 
 Gem::Specification.new do |spec|
   spec.name = "gcs_put"
-  spec.version = GcsPut::VERSION
+  spec.version = GCSPut::VERSION
   spec.authors = ["Julik Tarkhanov"]
   spec.email = ["me@julik.nl"]
   spec.license = "MIT"

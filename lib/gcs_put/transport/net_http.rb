@@ -3,7 +3,7 @@
 require "net/http"
 
 # Keeps one connection per host open for the duration of the upload
-class GcsPut::Transport::NetHTTP
+class GCSPut::Transport::NetHTTP
   TRANSIENT_ERRORS = [
     IOError, EOFError, SocketError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout,
     Net::WriteTimeout, OpenSSL::SSL::SSLError
@@ -38,10 +38,10 @@ class GcsPut::Transport::NetHTTP
     request = request_class.new(uri, headers)
     request.body = body
     response = connection_for(uri).request(request)
-    GcsPut::Transport::Response.new(response.code, response.each_header.to_h, response.body)
+    GCSPut::Transport::Response.new(response.code, response.each_header.to_h, response.body)
   rescue *TRANSIENT_ERRORS => e
     close
-    raise GcsPut::TransientError, "#{e.class}: #{e.message}"
+    raise GCSPut::TransientError, "#{e.class}: #{e.message}"
   end
 
   def connection_for(uri)

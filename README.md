@@ -19,7 +19,7 @@ storage = Google::Cloud::Storage.new
 bucket = storage.bucket("my-bucket")
 file = bucket.file("exports/report.csv.gz", skip_lookup: true) # does not need to exist
 
-GcsPut::ResumableUpload.new(file, content_type: "application/gzip").stream do |io|
+GCSPut::ResumableUpload.new(file, content_type: "application/gzip").stream do |io|
   gz = Zlib::GzipWriter.new(io)
   rows.each { |row| gz.write(row.to_csv) }
   gz.finish
@@ -35,7 +35,7 @@ The object yielded to the block responds to `write` and `<<`, so anything that w
 Every chunk except the last is held in memory and must be a multiple of 256 KiB. The default is 5 MB. Larger chunks mean fewer requests:
 
 ```ruby
-GcsPut::ResumableUpload.new(file, chunk_size: 32 * 1024 * 1024)
+GCSPut::ResumableUpload.new(file, chunk_size: 32 * 1024 * 1024)
 ```
 
 ### Using the parts separately
@@ -43,10 +43,10 @@ GcsPut::ResumableUpload.new(file, chunk_size: 32 * 1024 * 1024)
 The session URL is just a string. Once you have it, uploading needs no Google credentials at all, so a web process can sign and a worker can upload, or several processes can pick up the same session:
 
 ```ruby
-session_url = GcsPut::ResumableUpload.new(file).start_session
+session_url = GCSPut::ResumableUpload.new(file).start_session
 
 # Elsewhere, no SDK needed
-io = GcsPut::RangedPutIO.new(session_url, content_type: "binary/octet-stream")
+io = GCSPut::RangedPutIO.new(session_url, content_type: "binary/octet-stream")
 io.write(bytes)
 io.finish
 ```
@@ -54,13 +54,13 @@ io.finish
 If you already have a signed POST URL from somewhere else:
 
 ```ruby
-session_url = GcsPut::ResumableUpload.start_session(signed_post_url, content_type: "binary/octet-stream")
+session_url = GCSPut::ResumableUpload.start_session(signed_post_url, content_type: "binary/octet-stream")
 ```
 
 The chunker is also usable on its own, for anything that needs evenly sized pieces:
 
 ```ruby
-chunker = GcsPut::ByteChunker.new(chunk_size: 1024) { |bytes, is_last| ... }
+chunker = GCSPut::ByteChunker.new(chunk_size: 1024) { |bytes, is_last| ... }
 chunker << data
 chunker.finish
 ```
@@ -71,19 +71,19 @@ HTTP goes through a small transport object. The default uses `Net::HTTP` with on
 
 ```ruby
 conn = Faraday.new { |f| f.options.timeout = 120 }
-transport = GcsPut::Transport::Faraday.new(conn)
+transport = GCSPut::Transport::Faraday.new(conn)
 
-GcsPut::ResumableUpload.new(file, transport: transport).stream { |io| ... }
-GcsPut::RangedPutIO.new(session_url, transport: transport)
+GCSPut::ResumableUpload.new(file, transport: transport).stream { |io| ... }
+GCSPut::RangedPutIO.new(session_url, transport: transport)
 ```
 
 Without an argument the Faraday transport makes a default connection. The `raise_error` middleware is tolerated. Timeouts and connection errors for `Net::HTTP` can be set on its transport too:
 
 ```ruby
-GcsPut::Transport::NetHTTP.new(open_timeout: 10, read_timeout: 120)
+GCSPut::Transport::NetHTTP.new(open_timeout: 10, read_timeout: 120)
 ```
 
-Anything responding to `put(uri, body, headers)`, `post(uri, body, headers)` and `close` works as a transport. The verbs must return something with `status`, `body` and a case-insensitive `[]` for headers, and raise `GcsPut::TransientError` for failures worth retrying. Every chunk carries a `Content-MD5`, so an adapter that mangles request bodies fails loudly at upload time rather than quietly at download time. [httpx 1.4.0 did exactly that](https://gitlab.com/os85/httpx/-/issues/338).
+Anything responding to `put(uri, body, headers)`, `post(uri, body, headers)` and `close` works as a transport. The verbs must return something with `status`, `body` and a case-insensitive `[]` for headers, and raise `GCSPut::TransientError` for failures worth retrying. Every chunk carries a `Content-MD5`, so an adapter that mangles request bodies fails loudly at upload time rather than quietly at download time. [httpx 1.4.0 did exactly that](https://gitlab.com/os85/httpx/-/issues/338).
 
 ### Retries
 

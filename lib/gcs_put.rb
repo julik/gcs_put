@@ -8,7 +8,7 @@ require "forwardable"
 # resumable uploads of unknown size for ages though. This gem gives you a writable object
 # which chops what you write to it into correctly sized chunks and PUTs them into a
 # resumable upload session, so you never need to know the size up front.
-module GcsPut
+module GCSPut
   class Error < StandardError
   end
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module GcsPut::Signer
+module GCSPut::Signer
   # When running on GCE, GKE, Cloud Run etc. under a service account there is no private key
   # on the box to sign the URL with. The SDK then needs an `issuer` (the account email) and a
   # `signer` lambda which asks the IAM credentials API to sign for us. For that to be allowed the

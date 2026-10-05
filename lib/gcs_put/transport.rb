@@ -3,9 +3,9 @@
 # The uploader needs two HTTP verbs and does not care what performs them. A transport is any
 # object with `put(uri, body, headers)`, `post(uri, body, headers)` and `close`, where the verbs
 # return a `Transport::Response`. Failures worth retrying (connection resets, timeouts and the
-# like) must surface as `GcsPut::TransientError` so the uploader knows it may query
+# like) must surface as `GCSPut::TransientError` so the uploader knows it may query
 # the session and carry on. Anything else is allowed to propagate.
-module GcsPut::Transport
+module GCSPut::Transport
   autoload :NetHTTP, "gcs_put/transport/net_http"
   autoload :Faraday, "gcs_put/transport/faraday"
 

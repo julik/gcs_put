@@ -4,7 +4,7 @@ require "test_helper"
 
 class ByteChunkerTest < Minitest::Test
   def chunker_class
-    GcsPut::ByteChunker
+    GCSPut::ByteChunker
   end
 
   def collecting_chunker(chunk_size)

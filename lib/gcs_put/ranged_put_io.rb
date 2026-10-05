@@ -7,7 +7,7 @@
 #
 # Every chunk is retried from the byte offset GCS reports as persisted, so a chunk which
 # only partially made it over the wire gets topped up rather than resent from the start.
-class GcsPut::RangedPutIO
+class GCSPut::RangedPutIO
   extend Forwardable
 
   def_delegators :@chunker, :write, :<<
@@ -19,10 +19,10 @@ class GcsPut::RangedPutIO
   # @param chunk_size[Integer] must be a multiple of 256 KiB
   # @param content_type[String] sent with every PUT
   # @param max_attempts[Integer] how many times a single chunk may be sent before giving up
-  # @param transport[#put, #post, #close] see `GcsPut::Transport`
-  def initialize(session_url, chunk_size: GcsPut::DEFAULT_CHUNK_SIZE, content_type: "binary/octet-stream", max_attempts: 5, transport: GcsPut::Transport::NetHTTP.new)
-    unless (chunk_size % GcsPut::CHUNK_SIZE_UNIT).zero?
-      raise ArgumentError, "chunk_size of #{chunk_size} is not a multiple of #{GcsPut::CHUNK_SIZE_UNIT}"
+  # @param transport[#put, #post, #close] see `GCSPut::Transport`
+  def initialize(session_url, chunk_size: GCSPut::DEFAULT_CHUNK_SIZE, content_type: "binary/octet-stream", max_attempts: 5, transport: GCSPut::Transport::NetHTTP.new)
+    unless (chunk_size % GCSPut::CHUNK_SIZE_UNIT).zero?
+      raise ArgumentError, "chunk_size of #{chunk_size} is not a multiple of #{GCSPut::CHUNK_SIZE_UNIT}"
     end
 
     @session_uri = URI(session_url)
@@ -31,7 +31,7 @@ class GcsPut::RangedPutIO
     @transport = transport
     @bytes_persisted = 0
     @finished = false
-    @chunker = GcsPut::ByteChunker.new(chunk_size: chunk_size) { |bytes, is_last| upload_chunk(bytes, is_last) }
+    @chunker = GCSPut::ByteChunker.new(chunk_size: chunk_size) { |bytes, is_last| upload_chunk(bytes, is_last) }
   end
 
   # Sends the remaining buffered bytes as the final chunk and closes the GCS object
@@ -57,14 +57,14 @@ class GcsPut::RangedPutIO
     loop do
       attempts += 1
       if @bytes_persisted < chunk_start
-        raise GcsPut::UploadFailed, "GCS reports #{@bytes_persisted} bytes persisted but we already discarded everything before #{chunk_start}"
+        raise GCSPut::UploadFailed, "GCS reports #{@bytes_persisted} bytes persisted but we already discarded everything before #{chunk_start}"
       end
       body = chunk.byteslice(@bytes_persisted - chunk_start, chunk.bytesize)
 
       begin
         response = put_bytes(body, from: @bytes_persisted, total: total)
         failure = "HTTP #{response.status}"
-      rescue GcsPut::TransientError => e
+      rescue GCSPut::TransientError => e
         response = nil
         failure = e.message
       end
@@ -83,11 +83,11 @@ class GcsPut::RangedPutIO
           return
         end
       else
-        raise GcsPut::UploadFailed.new("Chunk PUT responded with HTTP #{response.status}: #{response.body}", response: response)
+        raise GCSPut::UploadFailed.new("Chunk PUT responded with HTTP #{response.status}: #{response.body}", response: response)
       end
 
       if attempts >= @max_attempts
-        raise GcsPut::UploadFailed, "Gave up on chunk at offset #{chunk_start} after #{attempts} attempts, last failure: #{failure}"
+        raise GCSPut::UploadFailed, "Gave up on chunk at offset #{chunk_start} after #{attempts} attempts, last failure: #{failure}"
       end
     end
   end
@@ -124,9 +124,9 @@ class GcsPut::RangedPutIO
     when 500..599, 408, 429
       false
     else
-      raise GcsPut::UploadFailed.new("Session status check responded with HTTP #{response.status}: #{response.body}", response: response)
+      raise GCSPut::UploadFailed.new("Session status check responded with HTTP #{response.status}: #{response.body}", response: response)
     end
-  rescue GcsPut::TransientError
+  rescue GCSPut::TransientError
     false
   end
 

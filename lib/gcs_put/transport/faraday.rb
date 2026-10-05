@@ -6,7 +6,7 @@ require "faraday"
 # Check the bytes arrive intact with whatever adapter you choose - we send a `Content-MD5` with
 # every chunk precisely because httpx 1.4.0 used to mangle request bodies,
 # see https://gitlab.com/os85/httpx/-/issues/338
-class GcsPut::Transport::Faraday
+class GCSPut::Transport::Faraday
   TRANSIENT_ERRORS = [::Faraday::ConnectionFailed, ::Faraday::TimeoutError, ::Faraday::SSLError].freeze
 
   # @param connection[Faraday::Connection, nil] a connection of your own, or `nil` to get a default one
@@ -32,12 +32,12 @@ class GcsPut::Transport::Faraday
 
   def request(verb, uri, body, headers)
     response = @connection.run_request(verb, uri.to_s, body, headers)
-    GcsPut::Transport::Response.new(response.status, response.headers, response.body)
+    GCSPut::Transport::Response.new(response.status, response.headers, response.body)
   rescue *TRANSIENT_ERRORS => e
-    raise GcsPut::TransientError, "#{e.class}: #{e.message}"
+    raise GCSPut::TransientError, "#{e.class}: #{e.message}"
   rescue ::Faraday::Error => e
     # The `raise_error` middleware turns 4xx and 5xx into exceptions, we want the response back
     raise unless e.response
-    GcsPut::Transport::Response.new(e.response_status, e.response_headers, e.response_body)
+    GCSPut::Transport::Response.new(e.response_status, e.response_headers, e.response_body)
   end
 end

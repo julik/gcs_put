@@ -5,14 +5,14 @@ require "test_helper"
 # The same suite runs once per transport, see the classes at the bottom
 module RangedPutIOTests
   SESSION_URL = "https://storage.googleapis.com/bucket/object?uploadType=resumable&upload_id=abc"
-  UNIT = GcsPut::CHUNK_SIZE_UNIT
+  UNIT = GCSPut::CHUNK_SIZE_UNIT
 
   def setup
     @puts = []
   end
 
   def new_io(**options)
-    GcsPut::RangedPutIO.new(SESSION_URL, transport: transport, **options)
+    GCSPut::RangedPutIO.new(SESSION_URL, transport: transport, **options)
   end
 
   # Records every PUT and answers with whatever the block decides for it
@@ -148,7 +148,7 @@ module RangedPutIOTests
 
     io = new_io(chunk_size: UNIT, max_attempts: 3)
     io << "hello"
-    err = assert_raises(GcsPut::UploadFailed) { io.finish }
+    err = assert_raises(GCSPut::UploadFailed) { io.finish }
     assert_match(/after 3 attempts/, err.message)
   end
 
@@ -157,7 +157,7 @@ module RangedPutIOTests
 
     io = new_io(chunk_size: UNIT)
     io << "hello"
-    err = assert_raises(GcsPut::UploadFailed) { io.finish }
+    err = assert_raises(GCSPut::UploadFailed) { io.finish }
     assert_equal 400, err.response.status
     assert_equal 1, @puts.size
   end
@@ -171,7 +171,7 @@ class RangedPutIONetHTTPTest < Minitest::Test
   include RangedPutIOTests
 
   def transport
-    GcsPut::Transport::NetHTTP.new
+    GCSPut::Transport::NetHTTP.new
   end
 end
 
@@ -179,7 +179,7 @@ class RangedPutIOFaradayTest < Minitest::Test
   include RangedPutIOTests
 
   def transport
-    GcsPut::Transport::Faraday.new
+    GCSPut::Transport::Faraday.new
   end
 end
 
@@ -188,6 +188,6 @@ class RangedPutIOFaradayWithRaiseErrorTest < Minitest::Test
 
   # The `raise_error` middleware must not get in the way of our own status handling
   def transport
-    GcsPut::Transport::Faraday.new(Faraday.new { |f| f.response :raise_error })
+    GCSPut::Transport::Faraday.new(Faraday.new { |f| f.response :raise_error })
   end
 end
