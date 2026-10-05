@@ -315,6 +315,16 @@ class ResumableUploadSessionTest < Minitest::Test
     assert_equal "binary/octet-stream", gcs_file.signed_url_calls.first[:content_type]
   end
 
+  def test_factories_are_available_on_the_top_level_module
+    stub_request(:post, SIGNED_POST_URL).to_return(status: 201, headers: {"Location" => SESSION_URL})
+    stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
+
+    assert_equal 5, with_signer_options({}) { GCSPut.from_gcs_file(gcs_file) { |io| io.write("hello") } }
+    assert_equal 5, GCSPut.from_signed_post_url(SIGNED_POST_URL) { |io| io.write("hello") }
+    assert_equal 5, GCSPut.from_session_url(SESSION_URL) { |io| io.write("hello") }
+    assert_kind_of GCSPut::ResumableUpload, GCSPut.from_session_url(SESSION_URL)
+  end
+
   def test_from_signed_post_url_fails_without_a_location
     stub_request(:post, SIGNED_POST_URL).to_return(status: 201)
     err = assert_raises(GCSPut::UploadFailed) { GCSPut::ResumableUpload.from_signed_post_url(SIGNED_POST_URL) }

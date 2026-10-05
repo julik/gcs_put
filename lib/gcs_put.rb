@@ -38,6 +38,11 @@ module GCSPut
   autoload :ResumableUpload, "gcs_put/resumable_upload"
   autoload :Signer, "gcs_put/signer"
   autoload :Transport, "gcs_put/transport"
+
+  class << self
+    extend Forwardable
+    def_delegators :"GCSPut::ResumableUpload", :from_gcs_file, :from_signed_post_url, :from_session_url
+  end
 end
 
 require "gcs_put/version"
