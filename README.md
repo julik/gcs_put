@@ -116,7 +116,7 @@ gcloud iam service-accounts add-iam-policy-binding SA_EMAIL \
   --role="roles/iam.serviceAccountTokenCreator"
 ```
 
-Without it, `start_session` fails with a permission error from the IAM API, not from Cloud Storage, which is confusing the first time. The background is in [google-cloud-ruby#13307](https://github.com/googleapis/google-cloud-ruby/issues/13307). The IAM Credentials API must also be enabled on the project.
+Without it, `from_gcs_file` fails with a permission error from the IAM API, not from Cloud Storage, which is confusing the first time. The background is in [google-cloud-ruby#13307](https://github.com/googleapis/google-cloud-ruby/issues/13307). The IAM Credentials API must also be enabled on the project.
 
 Extra options such as `expires:`, or an `issuer:` and `signer:` of your own, go in `signed_url_options:` and are passed through to `gcs_file.signed_url`.
 
