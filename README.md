@@ -28,6 +28,8 @@ end
 
 The object yielded to the block responds to `write` and `<<`, so anything that writes to an IO can write to it, including `IO.copy_stream`, `Zlib::GzipWriter` and `ZipKit::Streamer`. The last chunk is sent when the block returns, and the block form returns the total number of bytes uploaded. If the block raises, nothing is finalized and the session simply expires after a week.
 
+Everything except the file is optional. The content type defaults to `binary/octet-stream`, HTTP goes through `Net::HTTP`, and chunks are 5 MB.
+
 Without a block you get the upload back to drive by hand:
 
 ```ruby
@@ -53,7 +55,7 @@ upload = GCSPut::ResumableUpload.from_gcs_file(gcs_file)
 session_url = upload.session_url
 
 # Elsewhere, no SDK needed
-GCSPut::ResumableUpload.from_session_url(session_url, content_type: "binary/octet-stream") do |io|
+GCSPut::ResumableUpload.from_session_url(session_url) do |io|
   io.write(bytes)
 end
 ```
@@ -61,10 +63,10 @@ end
 If you have a signed POST URL from somewhere else, turn it into a session first:
 
 ```ruby
-session_url = GCSPut::ResumableUpload.start_session(signed_post_url, content_type: "binary/octet-stream")
+session_url = GCSPut::ResumableUpload.start_session(signed_post_url)
 ```
 
-The content type passed to `from_session_url` must match the one the session was started with.
+If the session was started with a content type other than the default, pass the same `content_type:` to `from_session_url`.
 
 The chunker is also usable on its own, for anything that needs evenly sized pieces:
 

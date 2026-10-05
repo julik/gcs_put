@@ -68,7 +68,7 @@ class GCSPut::ResumableUpload
   # @param content_type[String] must match the content type the URL was signed with
   # @param transport[#put, #post, #close] see `GCSPut::Transport`
   # @return [String] the session URL
-  def self.start_session(signed_post_url, content_type:, transport: GCSPut::Transport::NetHTTP.new)
+  def self.start_session(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new)
     response = transport.post(URI(signed_post_url), "", {"Content-Type" => content_type, "x-goog-resumable" => "start"})
     unless response.status == 201
       raise GCSPut::UploadFailed.new("Session start responded with HTTP #{response.status}: #{response.body}", response: response)
