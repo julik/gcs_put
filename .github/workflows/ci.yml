@@ -10,6 +10,8 @@ jobs:
   test_and_lint_minimum_ruby:
     name: Tests/Lint (3.2)
     runs-on: ubuntu-latest
+    env:
+      GCP_TEST_CREDENTIALS_JSON: ${{ secrets.GCP_TEST_CREDENTIALS_JSON }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,9 +21,7 @@ jobs:
           ruby-version: 3.2
           bundler-cache: true
       - name: GCP test credentials
-        env:
-          GCP_TEST_CREDENTIALS_JSON: ${{ secrets.GCP_TEST_CREDENTIALS_JSON }}
-        if: ${{ secrets.GCP_TEST_CREDENTIALS_JSON != '' }}
+        if: env.GCP_TEST_CREDENTIALS_JSON != ''
         run: |
           echo "$GCP_TEST_CREDENTIALS_JSON" > "$RUNNER_TEMP/gcp.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp.json" >> "$GITHUB_ENV"
@@ -32,6 +32,8 @@ jobs:
   test_recent_ruby:
     name: Tests (3.4)
     runs-on: ubuntu-latest
+    env:
+      GCP_TEST_CREDENTIALS_JSON: ${{ secrets.GCP_TEST_CREDENTIALS_JSON }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,9 +43,7 @@ jobs:
           ruby-version: 3.4
           bundler-cache: true
       - name: GCP test credentials
-        env:
-          GCP_TEST_CREDENTIALS_JSON: ${{ secrets.GCP_TEST_CREDENTIALS_JSON }}
-        if: ${{ secrets.GCP_TEST_CREDENTIALS_JSON != '' }}
+        if: env.GCP_TEST_CREDENTIALS_JSON != ''
         run: |
           echo "$GCP_TEST_CREDENTIALS_JSON" > "$RUNNER_TEMP/gcp.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp.json" >> "$GITHUB_ENV"
