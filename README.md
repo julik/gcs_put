@@ -17,45 +17,54 @@ require "gcs_put"
 
 storage = Google::Cloud::Storage.new
 bucket = storage.bucket("my-bucket")
-file = bucket.file("exports/report.csv.gz", skip_lookup: true) # does not need to exist
+gcs_file = bucket.file("exports/report.csv.gz", skip_lookup: true) # does not need to exist
 
-GCSPut::ResumableUpload.new(file, content_type: "application/gzip").stream do |io|
+GCSPut::ResumableUpload.from_gcs_file(gcs_file, content_type: "application/gzip") do |io|
   gz = Zlib::GzipWriter.new(io)
   rows.each { |row| gz.write(row.to_csv) }
   gz.finish
 end
 ```
 
-The object yielded to the block responds to `write` and `<<`, so anything that writes to an IO can write to it, including `IO.copy_stream`, `Zlib::GzipWriter` and `ZipKit::Streamer`. The last chunk is sent when the block returns. If the block raises, nothing is finalized and the session simply expires after a week.
+The object yielded to the block responds to `write` and `<<`, so anything that writes to an IO can write to it, including `IO.copy_stream`, `Zlib::GzipWriter` and `ZipKit::Streamer`. The last chunk is sent when the block returns, and the block form returns the total number of bytes uploaded. If the block raises, nothing is finalized and the session simply expires after a week.
 
-`stream` returns the total number of bytes uploaded.
+Without a block you get the upload back to drive by hand:
+
+```ruby
+upload = GCSPut::ResumableUpload.from_gcs_file(gcs_file)
+upload.write(bytes)
+upload.finish # => total bytes
+```
 
 ### Chunk size
 
 Every chunk except the last is held in memory and must be a multiple of 256 KiB. The default is 5 MB. Larger chunks mean fewer requests:
 
 ```ruby
-GCSPut::ResumableUpload.new(file, chunk_size: 32 * 1024 * 1024)
+GCSPut::ResumableUpload.from_gcs_file(gcs_file, chunk_size: 32 * 1024 * 1024)
 ```
 
-### Using the parts separately
+### Starting from a session URL
 
-The session URL is just a string. Once you have it, uploading needs no Google credentials at all, so a web process can sign and a worker can upload, or several processes can pick up the same session:
+The session URL is just a string, and once you have it uploading needs no Google credentials at all. So a web process can sign and start the session while a worker does the upload:
 
 ```ruby
-session_url = GCSPut::ResumableUpload.new(file).start_session
+upload = GCSPut::ResumableUpload.from_gcs_file(gcs_file)
+session_url = upload.session_url
 
 # Elsewhere, no SDK needed
-io = GCSPut::RangedPutIO.new(session_url, content_type: "binary/octet-stream")
-io.write(bytes)
-io.finish
+GCSPut::ResumableUpload.from_session_url(session_url, content_type: "binary/octet-stream") do |io|
+  io.write(bytes)
+end
 ```
 
-If you already have a signed POST URL from somewhere else:
+If you have a signed POST URL from somewhere else, turn it into a session first:
 
 ```ruby
 session_url = GCSPut::ResumableUpload.start_session(signed_post_url, content_type: "binary/octet-stream")
 ```
+
+The content type passed to `from_session_url` must match the one the session was started with.
 
 The chunker is also usable on its own, for anything that needs evenly sized pieces:
 
@@ -73,8 +82,8 @@ HTTP goes through a small transport object. The default uses `Net::HTTP` with on
 conn = Faraday.new { |f| f.options.timeout = 120 }
 transport = GCSPut::Transport::Faraday.new(conn)
 
-GCSPut::ResumableUpload.new(file, transport: transport).stream { |io| ... }
-GCSPut::RangedPutIO.new(session_url, transport: transport)
+GCSPut::ResumableUpload.from_gcs_file(gcs_file, transport: transport) { |io| ... }
+GCSPut::ResumableUpload.from_session_url(session_url, transport: transport)
 ```
 
 Without an argument the Faraday transport makes a default connection. The `raise_error` middleware is tolerated. Timeouts and connection errors for `Net::HTTP` can be set on its transport too:
@@ -87,7 +96,7 @@ Anything responding to `put(uri, body, headers)`, `post(uri, body, headers)` and
 
 ### Retries
 
-A chunk which fails with a connection error or a 5xx is not resent from the start. The session is asked how many bytes it has, and only the remainder goes out again. The same happens when GCS answers a PUT with a `Range` header showing it took fewer bytes than were sent. A chunk is given up on after 5 attempts, configurable via `max_attempts:` on `RangedPutIO`. A 4xx fails immediately.
+A chunk which fails with a connection error or a 5xx is not resent from the start. The session is asked how many bytes it has, and only the remainder goes out again. The same happens when GCS answers a PUT with a `Range` header showing it took fewer bytes than were sent. A chunk is given up on after 5 attempts, configurable via `max_attempts:`. A 4xx fails immediately.
 
 ## Permissions
 
@@ -105,7 +114,7 @@ gcloud iam service-accounts add-iam-policy-binding SA_EMAIL \
 
 Without it, `start_session` fails with a permission error from the IAM API, not from Cloud Storage, which is confusing the first time. The background is in [google-cloud-ruby#13307](https://github.com/googleapis/google-cloud-ruby/issues/13307). The IAM Credentials API must also be enabled on the project.
 
-Any extra options such as `expires:` or `issuer:` and `signer:` of your own are passed through to `file.signed_url`.
+Extra options such as `expires:`, or an `issuer:` and `signer:` of your own, go in `signed_url_options:` and are passed through to `gcs_file.signed_url`.
 
 ## Running the tests
 

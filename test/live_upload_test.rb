@@ -36,23 +36,23 @@ class LiveUploadTest < Minitest::Test
   end
 
   def test_uploads_something_smaller_than_a_chunk
-    file = new_file
-    GCSPut::ResumableUpload.new(file).stream { |io| io.write("Hello from a tiny resumable upload") }
+    gcs_file = new_file
+    GCSPut::ResumableUpload.from_gcs_file(gcs_file) { |io| io.write("Hello from a tiny resumable upload") }
 
-    wait_until_exists(file)
-    assert_equal "Hello from a tiny resumable upload", file.download.read
+    wait_until_exists(gcs_file)
+    assert_equal "Hello from a tiny resumable upload", gcs_file.download.read
   end
 
   def test_uploads_something_spanning_multiple_chunks
     rng = Random.new(Minitest.seed)
-    file = new_file
+    gcs_file = new_file
     size = (5 * 1024 * 1024 + 1) * 2
-    GCSPut::ResumableUpload.new(file, content_type: "x-top-secret/binary").stream do |io|
+    GCSPut::ResumableUpload.from_gcs_file(gcs_file, content_type: "x-top-secret/binary") do |io|
       2.times { io.write(rng.bytes(5 * 1024 * 1024 + 1)) }
     end
 
-    wait_until_exists(file)
-    assert_equal size, file.size
-    assert_equal "x-top-secret/binary", file.content_type
+    wait_until_exists(gcs_file)
+    assert_equal size, gcs_file.size
+    assert_equal "x-top-secret/binary", gcs_file.content_type
   end
 end

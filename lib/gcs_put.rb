@@ -35,7 +35,6 @@ module GCSPut
   DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024
 
   autoload :ByteChunker, "gcs_put/byte_chunker"
-  autoload :RangedPutIO, "gcs_put/ranged_put_io"
   autoload :ResumableUpload, "gcs_put/resumable_upload"
   autoload :Signer, "gcs_put/signer"
   autoload :Transport, "gcs_put/transport"
