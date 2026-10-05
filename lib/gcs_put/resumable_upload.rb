@@ -41,7 +41,24 @@ class GCSPut::ResumableUpload
   def self.from_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk)
     signed_url_options = GCSPut::Signer.url_issuer_and_signer.merge(signed_url_options)
     signed_post_url = gcs_file.signed_url(method: "POST", content_type: content_type, headers: {"x-goog-resumable" => "start"}, **signed_url_options)
-    session_url = start_session(signed_post_url, content_type: content_type, transport: transport)
+    from_signed_post_url(signed_post_url, content_type: content_type, transport: transport, **options, &blk)
+  end
+
+  # Starts a session from a signed POST URL (one with `x-goog-resumable: start` among its signed headers)
+  # and returns the upload, see https://cloud.google.com/storage/docs/performing-resumable-uploads#initiate-session
+  # With a block, yields the upload, finishes it once the block returns and returns the total size.
+  #
+  # @param signed_post_url[String]
+  # @param content_type[String] must match the content type the URL was signed with
+  # @param transport[#put, #post, #close] see `GCSPut::Transport`
+  # @param options[Hash] see `from_session_url`
+  # @return [GCSPut::ResumableUpload, Integer]
+  def self.from_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk)
+    response = transport.post(URI(signed_post_url), "", {"Content-Type" => content_type, "x-goog-resumable" => "start"})
+    unless response.status == 201
+      raise GCSPut::UploadFailed.new("Session start responded with HTTP #{response.status}: #{response.body}", response: response)
+    end
+    session_url = response["Location"] or raise GCSPut::UploadFailed.new("Session start did not return a Location header", response: response)
     from_session_url(session_url, content_type: content_type, transport: transport, **options, &blk)
   end
 
@@ -59,21 +76,6 @@ class GCSPut::ResumableUpload
     return upload unless block_given?
     yield(upload)
     upload.finish
-  end
-
-  # Turns a signed POST URL (one with `x-goog-resumable: start` among its signed headers) into a session URL,
-  # see https://cloud.google.com/storage/docs/performing-resumable-uploads#initiate-session
-  #
-  # @param signed_post_url[String]
-  # @param content_type[String] must match the content type the URL was signed with
-  # @param transport[#put, #post, #close] see `GCSPut::Transport`
-  # @return [String] the session URL
-  def self.start_session(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new)
-    response = transport.post(URI(signed_post_url), "", {"Content-Type" => content_type, "x-goog-resumable" => "start"})
-    unless response.status == 201
-      raise GCSPut::UploadFailed.new("Session start responded with HTTP #{response.status}: #{response.body}", response: response)
-    end
-    response["Location"] or raise GCSPut::UploadFailed.new("Session start did not return a Location header", response: response)
   end
 
   def initialize(session_url, chunk_size: GCSPut::DEFAULT_CHUNK_SIZE, content_type: "binary/octet-stream", max_attempts: 5, transport: GCSPut::Transport::NetHTTP.new)

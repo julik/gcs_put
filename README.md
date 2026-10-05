@@ -60,13 +60,15 @@ GCSPut::ResumableUpload.from_session_url(session_url) do |io|
 end
 ```
 
-If you have a signed POST URL from somewhere else, turn it into a session first:
+If you have a signed POST URL from somewhere else, one signed for `POST` with the `x-goog-resumable: start` header, start from that instead:
 
 ```ruby
-session_url = GCSPut::ResumableUpload.start_session(signed_post_url)
+GCSPut::ResumableUpload.from_signed_post_url(signed_post_url) do |io|
+  io.write(bytes)
+end
 ```
 
-If the session was started with a content type other than the default, pass the same `content_type:` to `from_session_url`.
+If the URL was signed, or the session started, with a content type other than the default, pass the same `content_type:`.
 
 The chunker is also usable on its own, for anything that needs evenly sized pieces:
 
