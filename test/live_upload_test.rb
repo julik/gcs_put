@@ -2,24 +2,37 @@
 
 require "test_helper"
 
-# Runs against a real bucket. Needs GOOGLE_APPLICATION_CREDENTIALS (or metadata server credentials)
-# and GCS_PUT_TEST_BUCKET set, otherwise the whole class is skipped
+# Runs against a real bucket and skips when it cannot find one. Credentials and project come from
+# the usual places the SDK looks - GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT, or the
+# gcloud application-default login. The bucket is "gcs_put_test_bucket" unless GCS_PUT_TEST_BUCKET says otherwise
 class LiveUploadTest < Minitest::Test
+  BUCKET_NAME = ENV.fetch("GCS_PUT_TEST_BUCKET", "gcs_put_test_bucket")
+
   def setup
-    skip "Set GCS_PUT_TEST_BUCKET to run live tests" unless ENV["GCS_PUT_TEST_BUCKET"]
     WebMock.disable!
-    require "google/cloud/storage"
-    @bucket = Google::Cloud::Storage.new.bucket(ENV["GCS_PUT_TEST_BUCKET"])
+    @bucket, skip_reason = self.class.bucket_lookup
+    skip skip_reason unless @bucket
     @files = []
   end
 
   def teardown
-    @files.each do |f|
+    @files&.each do |f|
       f.delete
     rescue Google::Cloud::Error
       # Never got created, fine
     end
     WebMock.enable!
+  end
+
+  # Looked up once per process so that a missing configuration costs one round trip, not one per test
+  def self.bucket_lookup
+    @bucket_lookup ||= begin
+      require "google/cloud/storage"
+      bucket = Google::Cloud::Storage.new.bucket(BUCKET_NAME)
+      bucket ? [bucket, nil] : [nil, "Bucket #{BUCKET_NAME} not found, live tests skipped"]
+    rescue => e
+      [nil, "No usable GCP configuration (#{e.class}: #{e.message.lines.first.strip}), live tests skipped"]
+    end
   end
 
   def new_file

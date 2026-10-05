@@ -126,7 +126,7 @@ Extra options such as `expires:`, or an `issuer:` and `signer:` of your own, go 
 bundle exec rake
 ```
 
-Unit tests stub HTTP and need nothing. The live tests run against a real bucket when `GCS_PUT_TEST_BUCKET` is set along with working credentials. Objects they create are deleted afterwards.
+Unit tests stub HTTP and need nothing. The live tests upload to a real bucket called `gcs_put_test_bucket`, or whatever `GCS_PUT_TEST_BUCKET` names, using the credentials and project the SDK finds on its own: `GOOGLE_APPLICATION_CREDENTIALS` and `GOOGLE_CLOUD_PROJECT`, or `gcloud auth application-default login`. Without a usable configuration or bucket they skip. Objects they create are deleted afterwards.
 
 ## Resources
 
