@@ -315,6 +315,16 @@ class ResumableUploadSessionTest < Minitest::Test
     assert_equal "binary/octet-stream", gcs_file.signed_url_calls.first[:content_type]
   end
 
+  def test_is_a_valid_destination_for_io_copy_stream
+    stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
+    blob = Random.new(Minitest.seed).bytes(1024)
+
+    upload = GCSPut.with_session_url(SESSION_URL)
+    assert_equal 1024, IO.copy_stream(StringIO.new(blob), upload)
+    assert_equal 1024, upload.finish
+    assert_requested(:put, SESSION_URL, body: blob)
+  end
+
   def test_close_finishes_so_gzip_writer_can_drive_it
     stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
 

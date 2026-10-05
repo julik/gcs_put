@@ -94,6 +94,19 @@ class ByteChunkerTest < Minitest::Test
     writes.each_slice(2) { |chunk, _| assert_equal Encoding::BINARY, chunk.encoding }
   end
 
+  def test_is_a_valid_destination_for_io_copy_stream
+    rng = Random.new(Minitest.seed)
+    blob = rng.bytes(rng.rand(1..64 * 1024))
+    out = StringIO.new.binmode
+    chunker = chunker_class.new(chunk_size: 777) { |bytes, _| out << bytes }
+
+    copied = IO.copy_stream(StringIO.new(blob), chunker)
+    chunker.finish
+
+    assert_equal blob.bytesize, copied
+    assert_equal blob, out.string
+  end
+
   def test_rejects_a_non_positive_chunk_size
     assert_raises(ArgumentError) { chunker_class.new(chunk_size: 0) {} }
   end
