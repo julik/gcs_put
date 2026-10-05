@@ -49,6 +49,7 @@ class GCSPut::ByteChunker
 
   private
 
+  # @return [void]
   def deliver_full_chunks
     while @buf.bytesize > @chunk_size
       @delivery_proc.call(@buf.byteslice(0, @chunk_size), _is_last = false)

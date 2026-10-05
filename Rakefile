@@ -15,4 +15,13 @@ task :format do
   `bundle exec magic_frozen_string_literal .`
 end
 
-task default: [:test, :standard]
+task :generate_typedefs do
+  # Types from other gems (URI, Faraday, Google::Cloud::Storage) are not resolvable for sord, hence the untyped fallback
+  `bundle exec sord --replace-errors-with-untyped rbi/gcs_put.rbi`
+  `bundle exec sord --replace-errors-with-untyped sig/gcs_put.rbs`
+end
+
+# When building the gem, generate typedefs beforehand so that they get included
+Rake::Task["build"].enhance(["generate_typedefs"])
+
+task default: [:test, :standard, :generate_typedefs]

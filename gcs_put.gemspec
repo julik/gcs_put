@@ -34,4 +34,8 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "faraday"
   spec.add_development_dependency "magic_frozen_string_literal"
   spec.add_development_dependency "standard", ">= 1.35.1"
+  spec.add_development_dependency "yard", "~> 0.9"
+  spec.add_development_dependency "sord"
+  # redcarpet is needed for yard to render Github Flavored Markdown
+  spec.add_development_dependency "redcarpet"
 end

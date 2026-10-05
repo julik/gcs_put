@@ -21,6 +21,14 @@
 class GCSPut::ResumableUpload
   extend Forwardable
 
+  # @!method write(bin_str)
+  #   Appends bytes to the upload, sending out a chunk whenever one fills up
+  #   @param bin_str[String]
+  #   @return [Integer] the number of bytes appended, like `IO#write`
+  # @!method <<(bin_str)
+  #   Appends bytes to the upload, sending out a chunk whenever one fills up
+  #   @param bin_str[String]
+  #   @return [self]
   def_delegators :@chunker, :write, :<<
 
   # @return [String] the session URL, valid for a week and usable from any process
@@ -36,8 +44,9 @@ class GCSPut::ResumableUpload
   # @param content_type[String] the content type of the resulting object
   # @param transport[#put, #post, #close] see `GCSPut::Transport`
   # @param signed_url_options[Hash] passed to `gcs_file.signed_url`, see `Signer.url_issuer_and_signer`
-  # @param options[Hash] see `with_session_url`
-  # @return [GCSPut::ResumableUpload, Integer]
+  # @param options[Hash] see {#initialize}
+  # @yield [GCSPut::ResumableUpload] the upload to write into
+  # @return [GCSPut::ResumableUpload, Integer] the upload, or the total size when given a block
   def self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk)
     signed_url_options = GCSPut::Signer.url_issuer_and_signer.merge(signed_url_options)
     signed_post_url = gcs_file.signed_url(method: "POST", content_type: content_type, headers: {"x-goog-resumable" => "start"}, **signed_url_options)
@@ -51,8 +60,9 @@ class GCSPut::ResumableUpload
   # @param signed_post_url[String]
   # @param content_type[String] must match the content type the URL was signed with
   # @param transport[#put, #post, #close] see `GCSPut::Transport`
-  # @param options[Hash] see `with_session_url`
-  # @return [GCSPut::ResumableUpload, Integer]
+  # @param options[Hash] see {#initialize}
+  # @yield [GCSPut::ResumableUpload] the upload to write into
+  # @return [GCSPut::ResumableUpload, Integer] the upload, or the total size when given a block
   def self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk)
     response = transport.post(URI(signed_post_url), "", {"Content-Type" => content_type, "x-goog-resumable" => "start"})
     unless response.status == 201
@@ -66,11 +76,9 @@ class GCSPut::ResumableUpload
   # the block returns and returns the total size.
   #
   # @param session_url[String] the `Location` returned by the session start
-  # @param content_type[String] must match the content type the session was started with
-  # @param chunk_size[Integer] must be a multiple of 256 KiB
-  # @param max_attempts[Integer] how many times a single chunk may be sent before giving up
-  # @param transport[#put, #post, #close] see `GCSPut::Transport`
-  # @return [GCSPut::ResumableUpload, Integer]
+  # @param options[Hash] see {#initialize}
+  # @yield [GCSPut::ResumableUpload] the upload to write into
+  # @return [GCSPut::ResumableUpload, Integer] the upload, or the total size when given a block
   def self.with_session_url(session_url, **options)
     upload = new(session_url, **options)
     return upload unless block_given?
@@ -78,6 +86,14 @@ class GCSPut::ResumableUpload
     upload.finish
   end
 
+  # Prefer the `with_*` factories. This does no HTTP by itself, the first request goes out
+  # once a chunk fills up or `finish` gets called
+  #
+  # @param session_url[String] the `Location` returned by the session start
+  # @param chunk_size[Integer] must be a multiple of 256 KiB
+  # @param content_type[String] must match the content type the session was started with
+  # @param max_attempts[Integer] how many times a single chunk may be sent before giving up
+  # @param transport[#put, #post, #close] see `GCSPut::Transport`
   def initialize(session_url, chunk_size: GCSPut::DEFAULT_CHUNK_SIZE, content_type: "binary/octet-stream", max_attempts: 5, transport: GCSPut::Transport::NetHTTP.new)
     unless (chunk_size % GCSPut::CHUNK_SIZE_UNIT).zero?
       raise ArgumentError, "chunk_size of #{chunk_size} is not a multiple of #{GCSPut::CHUNK_SIZE_UNIT}"
@@ -110,6 +126,9 @@ class GCSPut::ResumableUpload
 
   private
 
+  # @param chunk[String]
+  # @param is_last[Boolean]
+  # @return [void]
   def upload_chunk(chunk, is_last)
     chunk_start = @bytes_persisted
     chunk_end = chunk_start + chunk.bytesize
@@ -154,6 +173,10 @@ class GCSPut::ResumableUpload
     end
   end
 
+  # @param body[String]
+  # @param from[Integer]
+  # @param total[Integer, String] the total size, or "*" while still unknown
+  # @return [GCSPut::Transport::Response]
   def put_bytes(body, from:, total:)
     content_range = if body.empty?
       "bytes */#{total}"
@@ -193,6 +216,9 @@ class GCSPut::ResumableUpload
   end
 
   # The `Range` header is "bytes=0-N" with N being the last persisted byte, and absent if nothing persisted yet
+  #
+  # @param response[GCSPut::Transport::Response]
+  # @return [Integer]
   def persisted_offset_from(response)
     range = response["Range"]
     return 0 unless range

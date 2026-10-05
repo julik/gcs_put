@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# Supplies the `issuer` and `signer` that `Google::Cloud::Storage::File#signed_url` needs
+# when there is no private key around to sign with
 module GCSPut::Signer
   # When running on GCE, GKE, Cloud Run etc. under a service account there is no private key
   # on the box to sign the URL with. The SDK then needs an `issuer` (the account email) and a

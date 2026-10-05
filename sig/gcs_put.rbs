@@ -1,0 +1,345 @@
+# The Ruby GCP SDK can only upload things it can measure in advance. GCS itself has supported
+# resumable uploads of unknown size for ages though. This gem gives you a writable object
+# which chops what you write to it into correctly sized chunks and PUTs them into a
+# resumable upload session, so you never need to know the size up front.
+module GCSPut
+  extend Forwardable
+  CHUNK_SIZE_UNIT: untyped
+  DEFAULT_CHUNK_SIZE: untyped
+  VERSION: untyped
+
+  # Base class for everything the gem raises
+  class Error < StandardError
+  end
+
+  # Raised by transports for failures worth retrying - connection resets, timeouts and the like
+  class TransientError < GCSPut::Error
+  end
+
+  # Raised when GCS answers a chunk PUT with something we cannot recover from
+  class UploadFailed < GCSPut::Error
+    # _@param_ `message`
+    # 
+    # _@param_ `response`
+    def initialize: (String message, ?response: GCSPut::Transport::Response?) -> void
+
+    # _@return_ — the response which caused the failure, if there was one
+    attr_reader response: GCSPut::Transport::Response?
+  end
+
+  # Supplies the `issuer` and `signer` that `Google::Cloud::Storage::File#signed_url` needs
+  # when there is no private key around to sign with
+  module Signer
+    # When running on GCE, GKE, Cloud Run etc. under a service account there is no private key
+    # on the box to sign the URL with. The SDK then needs an `issuer` (the account email) and a
+    # `signer` lambda which asks the IAM credentials API to sign for us. For that to be allowed the
+    # service account must have `roles/iam.serviceAccountTokenCreator` on itself.
+    # Lifted from https://github.com/googleapis/google-cloud-ruby/issues/13307#issuecomment-1894546343
+    # 
+    # _@return_ — either `{issuer:, signer:}` or an empty hash when not on compute engine
+    def self.url_issuer_and_signer: () -> ::Hash[untyped, untyped]
+
+    # _@param_ `service_account_email`
+    # 
+    # _@return_ — a lambda which takes the string to sign and returns the signature
+    def self.iam_signer_for: (String service_account_email) -> Proc
+  end
+
+  # The uploader needs two HTTP verbs and does not care what performs them. A transport is any
+  # object with `put(uri, body, headers)`, `post(uri, body, headers)` and `close`, where the verbs
+  # return a `Transport::Response`. Failures worth retrying (connection resets, timeouts and the
+  # like) must surface as `GCSPut::TransientError` so the uploader knows it may query
+  # the session and carry on. Anything else is allowed to propagate.
+  module Transport
+    # What a transport hands back from `put` and `post`
+    class Response
+      # sord duck - #to_i looks like a duck type with an equivalent RBS interface, replacing with _ToI
+      # sord duck - #to_h looks like a duck type, replacing with untyped
+      # sord duck - #to_s looks like a duck type with an equivalent RBS interface, replacing with _ToS
+      # _@param_ `status`
+      # 
+      # _@param_ `headers` — header names in any case
+      # 
+      # _@param_ `body`
+      def initialize: (_ToI status, untyped headers, _ToS body) -> void
+
+      # _@param_ `name` — header name in any case
+      def []: (String name) -> String?
+
+      # _@return_ — the HTTP status code
+      attr_reader status: Integer
+
+      # _@return_ — the headers, with lowercased names
+      attr_reader headers: ::Hash[String, String]
+
+      # _@return_ — the body, empty if there was none
+      attr_reader body: String
+    end
+
+    # Uses a Faraday connection, so you can pick the adapter, timeouts and instrumentation yourself.
+    # Check the bytes arrive intact with whatever adapter you choose - we send a `Content-MD5` with
+    # every chunk precisely because httpx 1.4.0 used to mangle request bodies,
+    # see https://gitlab.com/os85/httpx/-/issues/338
+    class Faraday
+      TRANSIENT_ERRORS: untyped
+
+      # sord warn - Faraday::Connection wasn't able to be resolved to a constant in this project
+      # _@param_ `connection` — a connection of your own, or `nil` to get a default one
+      def initialize: (?Faraday::Connection? connection) -> void
+
+      # sord warn - URI::Generic wasn't able to be resolved to a constant in this project
+      # _@param_ `uri`
+      # 
+      # _@param_ `body`
+      # 
+      # _@param_ `headers`
+      def put: (URI::Generic uri, String body, ::Hash[String, String] headers) -> GCSPut::Transport::Response
+
+      # sord warn - URI::Generic wasn't able to be resolved to a constant in this project
+      # _@param_ `uri`
+      # 
+      # _@param_ `body`
+      # 
+      # _@param_ `headers`
+      def post: (URI::Generic uri, String body, ::Hash[String, String] headers) -> GCSPut::Transport::Response
+
+      # A connection you passed in is yours to close, we only close the one we made
+      def close: () -> void
+
+      # sord omit - no YARD type given for "verb", using untyped
+      # sord omit - no YARD type given for "uri", using untyped
+      # sord omit - no YARD type given for "body", using untyped
+      # sord omit - no YARD type given for "headers", using untyped
+      # sord omit - no YARD return type given, using untyped
+      def request: (
+                     untyped verb,
+                     untyped uri,
+                     untyped body,
+                     untyped headers
+                   ) -> untyped
+    end
+
+    # Keeps one connection per host open for the duration of the upload
+    class NetHTTP
+      TRANSIENT_ERRORS: untyped
+
+      # _@param_ `http_options` — forwarded to `Net::HTTP.start` (`open_timeout:`, `read_timeout:`...)
+      def initialize: (**::Hash[untyped, untyped] http_options) -> void
+
+      # sord warn - URI::Generic wasn't able to be resolved to a constant in this project
+      # _@param_ `uri`
+      # 
+      # _@param_ `body`
+      # 
+      # _@param_ `headers`
+      def put: (URI::Generic uri, String body, ::Hash[String, String] headers) -> GCSPut::Transport::Response
+
+      # sord warn - URI::Generic wasn't able to be resolved to a constant in this project
+      # _@param_ `uri`
+      # 
+      # _@param_ `body`
+      # 
+      # _@param_ `headers`
+      def post: (URI::Generic uri, String body, ::Hash[String, String] headers) -> GCSPut::Transport::Response
+
+      # Closes the kept connections. Safe to call repeatedly, the next request reopens as needed
+      def close: () -> void
+
+      # sord omit - no YARD type given for "request_class", using untyped
+      # sord omit - no YARD type given for "uri", using untyped
+      # sord omit - no YARD type given for "body", using untyped
+      # sord omit - no YARD type given for "headers", using untyped
+      # sord omit - no YARD return type given, using untyped
+      def request: (
+                     untyped request_class,
+                     untyped uri,
+                     untyped body,
+                     untyped headers
+                   ) -> untyped
+
+      # sord omit - no YARD type given for "uri", using untyped
+      # sord omit - no YARD return type given, using untyped
+      def connection_for: (untyped uri) -> untyped
+    end
+  end
+
+  # Chops an arbitrary stream of writes into evenly sized chunks. Every chunk except the last
+  # will be exactly `chunk_size` bytes, and the last one can be anything from 0 bytes up to and
+  # including `chunk_size`. A chunk which fills up exactly is held back until `finish` so that
+  # a stream ending on a chunk boundary still delivers that chunk flagged as the last one.
+  # 
+  #   chunker = ByteChunker.new(chunk_size: 3) { |bytes, is_last| puts [bytes, is_last].inspect }
+  #   chunker << "ab" << "cdefg"  # => ["abc", false], ["def", false]
+  #   chunker.finish              # => ["g", true]
+  class ByteChunker
+    # _@param_ `chunk_size` — the size that every chunk except the last must have
+    def initialize: (chunk_size: Integer) -> void
+
+    # _@param_ `bin_str` — the bytes to append
+    def <<: (String bin_str) -> self
+
+    # _@param_ `bin_str` — the bytes to append
+    # 
+    # _@return_ — the number of bytes appended, like `IO#write`
+    def write: (String bin_str) -> Integer
+
+    # Delivers whatever is left in the buffer as the last chunk. The last chunk
+    # gets delivered even when empty - it is what closes the upload
+    def finish: () -> void
+
+    def deliver_full_chunks: () -> void
+  end
+
+  # A writable object which streams what you write into a GCS resumable upload session using
+  # ranged PUTs, see https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload
+  # You do not need to know the size of the output in advance. You do need to `finish` the upload,
+  # since it is the last PUT (with the total size filled in) which closes the GCS object.
+  # 
+  #   gcs_file = bucket.file("upload.bin", skip_lookup: true)
+  #   GCSPut.with_gcs_file(gcs_file) do |io|
+  #     io.write("Hello resumable")
+  #     20.times { io.write(Random.bytes(1024 * 1024)) }
+  #   end
+  # 
+  # Every chunk is retried from the byte offset GCS reports as persisted, so a chunk which
+  # only partially made it over the wire gets topped up rather than resent from the start.
+  # 
+  # Starting the session needs a signed POST URL, and signing needs a private key. Under
+  # workload identity there is no key, so we fall back to the IAM signBlob API - which means
+  # the service account must hold `roles/iam.serviceAccountTokenCreator` on itself. See
+  # https://github.com/googleapis/google-cloud-ruby/issues/13307
+  class ResumableUpload
+    extend Forwardable
+
+    # Appends bytes to the upload, sending out a chunk whenever one fills up
+    # 
+    # _@param_ `bin_str`
+    # 
+    # _@return_ — the number of bytes appended, like `IO#write`
+    def write: (String bin_str) -> Integer
+
+    # Appends bytes to the upload, sending out a chunk whenever one fills up
+    # 
+    # _@param_ `bin_str`
+    def <<: (String bin_str) -> self
+
+    # sord warn - Google::Cloud::Storage::File wasn't able to be resolved to a constant in this project
+    # sord duck - #put looks like a duck type, replacing with untyped
+    # sord duck - #post looks like a duck type, replacing with untyped
+    # sord duck - #close looks like a duck type, replacing with untyped
+    # Signs a session start URL for the object, starts the session and returns the upload.
+    # With a block, yields the upload, finishes it once the block returns and returns the total size.
+    # 
+    # _@param_ `gcs_file` — the object to upload into, does not need to exist yet
+    # 
+    # _@param_ `content_type` — the content type of the resulting object
+    # 
+    # _@param_ `transport` — see `GCSPut::Transport`
+    # 
+    # _@param_ `signed_url_options` — passed to `gcs_file.signed_url`, see `Signer.url_issuer_and_signer`
+    # 
+    # _@param_ `options` — see {#initialize}
+    # 
+    # _@return_ — the upload, or the total size when given a block
+    def self.with_gcs_file: (
+                              Google::Cloud::Storage::File gcs_file,
+                              ?content_type: String,
+                              ?transport: untyped,
+                              ?signed_url_options: ::Hash[untyped, untyped],
+                              **::Hash[untyped, untyped] options
+                            ) -> (GCSPut::ResumableUpload | Integer)
+
+    # sord duck - #put looks like a duck type, replacing with untyped
+    # sord duck - #post looks like a duck type, replacing with untyped
+    # sord duck - #close looks like a duck type, replacing with untyped
+    # Starts a session from a signed POST URL (one with `x-goog-resumable: start` among its signed headers)
+    # and returns the upload, see https://cloud.google.com/storage/docs/performing-resumable-uploads#initiate-session
+    # With a block, yields the upload, finishes it once the block returns and returns the total size.
+    # 
+    # _@param_ `signed_post_url`
+    # 
+    # _@param_ `content_type` — must match the content type the URL was signed with
+    # 
+    # _@param_ `transport` — see `GCSPut::Transport`
+    # 
+    # _@param_ `options` — see {#initialize}
+    # 
+    # _@return_ — the upload, or the total size when given a block
+    def self.with_signed_post_url: (
+                                     String signed_post_url,
+                                     ?content_type: String,
+                                     ?transport: untyped,
+                                     **::Hash[untyped, untyped] options
+                                   ) -> (GCSPut::ResumableUpload | Integer)
+
+    # Wraps an already started session. With a block, yields the upload, finishes it once
+    # the block returns and returns the total size.
+    # 
+    # _@param_ `session_url` — the `Location` returned by the session start
+    # 
+    # _@param_ `options` — see {#initialize}
+    # 
+    # _@return_ — the upload, or the total size when given a block
+    def self.with_session_url: (String session_url, **::Hash[untyped, untyped] options) -> (GCSPut::ResumableUpload | Integer)
+
+    # sord duck - #put looks like a duck type, replacing with untyped
+    # sord duck - #post looks like a duck type, replacing with untyped
+    # sord duck - #close looks like a duck type, replacing with untyped
+    # Prefer the `with_*` factories. This does no HTTP by itself, the first request goes out
+    # once a chunk fills up or `finish` gets called
+    # 
+    # _@param_ `session_url` — the `Location` returned by the session start
+    # 
+    # _@param_ `chunk_size` — must be a multiple of 256 KiB
+    # 
+    # _@param_ `content_type` — must match the content type the session was started with
+    # 
+    # _@param_ `max_attempts` — how many times a single chunk may be sent before giving up
+    # 
+    # _@param_ `transport` — see `GCSPut::Transport`
+    def initialize: (
+                      String session_url,
+                      ?chunk_size: Integer,
+                      ?content_type: String,
+                      ?max_attempts: Integer,
+                      ?transport: untyped
+                    ) -> void
+
+    # Sends the remaining buffered bytes as the final chunk and closes the GCS object.
+    # Also available as `close` so that writers which close their underlying IO, like
+    # `Zlib::GzipWriter`, finish the upload for you
+    # 
+    # _@return_ — the total number of bytes uploaded
+    def finish: () -> Integer
+
+    # _@param_ `chunk`
+    # 
+    # _@param_ `is_last`
+    def upload_chunk: (String chunk, bool is_last) -> void
+
+    # _@param_ `body`
+    # 
+    # _@param_ `from`
+    # 
+    # _@param_ `total` — the total size, or "*" while still unknown
+    def put_bytes: (String body, from: Integer, total: (Integer | String)) -> GCSPut::Transport::Response
+
+    # Asks GCS how much of the upload it has and updates `bytes_persisted` accordingly, see
+    # https://cloud.google.com/storage/docs/performing-resumable-uploads#status-check
+    # A status check which fails itself just leaves us with what we already knew
+    # 
+    # _@return_ — whether the session turned out to be finalized already
+    def sync_with_session_finds_it_finalized?: () -> bool
+
+    # The `Range` header is "bytes=0-N" with N being the last persisted byte, and absent if nothing persisted yet
+    # 
+    # _@param_ `response`
+    def persisted_offset_from: (GCSPut::Transport::Response response) -> Integer
+
+    # _@return_ — the session URL, valid for a week and usable from any process
+    attr_reader session_url: String
+
+    # _@return_ — the number of bytes GCS has confirmed as persisted so far
+    attr_reader bytes_persisted: Integer
+  end
+end

@@ -9,6 +9,7 @@ require "forwardable"
 # which chops what you write to it into correctly sized chunks and PUTs them into a
 # resumable upload session, so you never need to know the size up front.
 module GCSPut
+  # Base class for everything the gem raises
   class Error < StandardError
   end
 
@@ -18,8 +19,11 @@ module GCSPut
 
   # Raised when GCS answers a chunk PUT with something we cannot recover from
   class UploadFailed < Error
+    # @return [GCSPut::Transport::Response, nil] the response which caused the failure, if there was one
     attr_reader :response
 
+    # @param message[String]
+    # @param response[GCSPut::Transport::Response, nil]
     def initialize(message, response: nil)
       super(message)
       @response = response
@@ -39,6 +43,15 @@ module GCSPut
   autoload :Signer, "gcs_put/signer"
   autoload :Transport, "gcs_put/transport"
 
+  # @!method self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk)
+  #   Shorthand for {GCSPut::ResumableUpload.with_gcs_file}
+  #   @return [GCSPut::ResumableUpload, Integer]
+  # @!method self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk)
+  #   Shorthand for {GCSPut::ResumableUpload.with_signed_post_url}
+  #   @return [GCSPut::ResumableUpload, Integer]
+  # @!method self.with_session_url(session_url, **options, &blk)
+  #   Shorthand for {GCSPut::ResumableUpload.with_session_url}
+  #   @return [GCSPut::ResumableUpload, Integer]
   class << self
     extend Forwardable
 

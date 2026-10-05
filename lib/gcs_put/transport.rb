@@ -9,8 +9,16 @@ module GCSPut::Transport
   autoload :NetHTTP, "gcs_put/transport/net_http"
   autoload :Faraday, "gcs_put/transport/faraday"
 
+  # What a transport hands back from `put` and `post`
   class Response
-    attr_reader :status, :headers, :body
+    # @return [Integer] the HTTP status code
+    attr_reader :status
+
+    # @return [Hash{String => String}] the headers, with lowercased names
+    attr_reader :headers
+
+    # @return [String] the body, empty if there was none
+    attr_reader :body
 
     # @param status[#to_i]
     # @param headers[#to_h] header names in any case

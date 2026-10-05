@@ -1,0 +1,8 @@
+lib/gcs_put.rb 94d267b3d3d19f7226309fb696bd1db837bc60b6
+lib/gcs_put/signer.rb e6a51a018c4ec4193f8d21c7d75388e8ad8be846
+lib/gcs_put/version.rb 8dbe8300d41534944bbd1bfac38468adcf6c2feb
+lib/gcs_put/transport.rb bcecbb7f1ea6d1eabb1ebdceb4b8d3c7c16f854d
+lib/gcs_put/byte_chunker.rb 6d1e1562445e7f37fa93be559c219a6f5099a09d
+lib/gcs_put/resumable_upload.rb b37127bca06a4b53dc5e2208b0201ba45f3a1c29
+lib/gcs_put/transport/faraday.rb 65ec820b23b24328f91be20b1364dcde131f7bd7
+lib/gcs_put/transport/net_http.rb 4738ad23d690204787268ab648fbbb66c8f568da

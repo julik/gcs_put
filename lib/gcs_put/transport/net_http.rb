@@ -4,6 +4,7 @@ require "net/http"
 
 # Keeps one connection per host open for the duration of the upload
 class GCSPut::Transport::NetHTTP
+  # What Net::HTTP raises when the connection, rather than the request, is at fault
   TRANSIENT_ERRORS = [
     IOError, EOFError, SocketError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout,
     Net::WriteTimeout, OpenSSL::SSL::SSLError
@@ -15,14 +16,27 @@ class GCSPut::Transport::NetHTTP
     @connections = {}
   end
 
+  # @param uri[URI::Generic]
+  # @param body[String]
+  # @param headers[Hash{String => String}]
+  # @return [GCSPut::Transport::Response]
+  # @raise [GCSPut::TransientError] on connection errors and timeouts
   def put(uri, body, headers)
     request(Net::HTTP::Put, uri, body, headers)
   end
 
+  # @param uri[URI::Generic]
+  # @param body[String]
+  # @param headers[Hash{String => String}]
+  # @return [GCSPut::Transport::Response]
+  # @raise [GCSPut::TransientError] on connection errors and timeouts
   def post(uri, body, headers)
     request(Net::HTTP::Post, uri, body, headers)
   end
 
+  # Closes the kept connections. Safe to call repeatedly, the next request reopens as needed
+  #
+  # @return [void]
   def close
     @connections.each_value do |connection|
       connection.finish if connection.started?
