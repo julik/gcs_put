@@ -38,6 +38,22 @@ upload.write(bytes)
 upload.finish # => total bytes
 ```
 
+### Encryption keys and other session headers
+
+Anything GCS takes from the session start, such as a customer-supplied encryption key, `Content-Disposition` or `x-goog-meta-*` metadata, goes in `headers:`. They get signed into the POST URL and sent with it. The chunks do not need them:
+
+```ruby
+GCSPut.with_gcs_file(gcs_file, headers: {
+  "x-goog-encryption-algorithm" => "AES256",
+  "x-goog-encryption-key" => Base64.strict_encode64(key),
+  "x-goog-encryption-key-sha256" => Digest::SHA256.base64digest(key)
+}) do |io|
+  io.write(bytes)
+end
+```
+
+`with_signed_post_url` takes `headers:` too, and they must match the ones the URL was signed with.
+
 ### Chunk size
 
 Every chunk except the last is held in memory and must be a multiple of 256 KiB. The default is 5 MB. Larger chunks mean fewer requests:

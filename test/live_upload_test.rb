@@ -68,4 +68,20 @@ class LiveUploadTest < Minitest::Test
     assert_equal size, gcs_file.size
     assert_equal "x-top-secret/binary", gcs_file.content_type
   end
+
+  def test_uploads_with_a_customer_supplied_encryption_key
+    key = Random.bytes(32)
+    csek = {
+      "x-goog-encryption-algorithm" => "AES256",
+      "x-goog-encryption-key" => [key].pack("m0"),
+      "x-goog-encryption-key-sha256" => Digest::SHA256.base64digest(key)
+    }
+    gcs_file = new_file
+    GCSPut::ResumableUpload.with_gcs_file(gcs_file, headers: csek) { |io| io.write("Hello from an encrypted upload") }
+
+    wait_until_exists(gcs_file)
+    assert_raises(Google::Cloud::Error) { gcs_file.download }
+    # With an encryption_key the SDK hands back the StringIO without rewinding it
+    assert_equal "Hello from an encrypted upload", gcs_file.download(encryption_key: key).string
+  end
 end

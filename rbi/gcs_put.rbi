@@ -7,7 +7,7 @@ module GCSPut
   extend Forwardable
   CHUNK_SIZE_UNIT = T.let(256 * 1024, T.untyped)
   DEFAULT_CHUNK_SIZE = T.let(5 * 1024 * 1024, T.untyped)
-  VERSION = T.let("0.1.0", T.untyped)
+  VERSION = T.let("0.2.0", T.untyped)
 
   # Base class for everything the gem raises
   class Error < StandardError
@@ -271,6 +271,8 @@ module GCSPut
     # 
     # _@param_ `transport` — see `GCSPut::Transport`
     # 
+    # _@param_ `headers` — extra headers for the session start, signed into the URL and sent along with it - customer-supplied encryption keys, `Content-Disposition`, `x-goog-meta-*` and the like
+    # 
     # _@param_ `signed_url_options` — passed to `gcs_file.signed_url`, see `Signer.url_issuer_and_signer`
     # 
     # _@param_ `options` — see {#initialize}
@@ -281,12 +283,13 @@ module GCSPut
         gcs_file: Google::Cloud::Storage::File,
         content_type: String,
         transport: T.untyped,
+        headers: T::Hash[T.untyped, T.untyped],
         signed_url_options: T::Hash[T.untyped, T.untyped],
         options: T::Hash[T.untyped, T.untyped],
         blk: T.untyped
       ).returns(T.any(GCSPut::ResumableUpload, Integer))
     end
-    def self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk); end
+    def self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, signed_url_options: {}, **options, &blk); end
 
     # sord duck - #put looks like a duck type, replacing with untyped
     # sord duck - #post looks like a duck type, replacing with untyped
@@ -301,6 +304,8 @@ module GCSPut
     # 
     # _@param_ `transport` — see `GCSPut::Transport`
     # 
+    # _@param_ `headers` — extra headers to send with the session start, must match the ones the URL was signed with. Only the session start needs them, chunks get uploaded without
+    # 
     # _@param_ `options` — see {#initialize}
     # 
     # _@return_ — the upload, or the total size when given a block
@@ -309,11 +314,12 @@ module GCSPut
         signed_post_url: String,
         content_type: String,
         transport: T.untyped,
+        headers: T::Hash[T.untyped, T.untyped],
         options: T::Hash[T.untyped, T.untyped],
         blk: T.untyped
       ).returns(T.any(GCSPut::ResumableUpload, Integer))
     end
-    def self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk); end
+    def self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, **options, &blk); end
 
     # Wraps an already started session. With a block, yields the upload, finishes it once
     # the block returns and returns the total size.

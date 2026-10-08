@@ -43,14 +43,16 @@ class GCSPut::ResumableUpload
   # @param gcs_file[Google::Cloud::Storage::File] the object to upload into, does not need to exist yet
   # @param content_type[String] the content type of the resulting object
   # @param transport[#put, #post, #close] see `GCSPut::Transport`
+  # @param headers[Hash] extra headers for the session start, signed into the URL and sent along with it -
+  #   customer-supplied encryption keys, `Content-Disposition`, `x-goog-meta-*` and the like
   # @param signed_url_options[Hash] passed to `gcs_file.signed_url`, see `Signer.url_issuer_and_signer`
   # @param options[Hash] see {#initialize}
   # @yield [GCSPut::ResumableUpload] the upload to write into
   # @return [GCSPut::ResumableUpload, Integer] the upload, or the total size when given a block
-  def self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk)
+  def self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, signed_url_options: {}, **options, &blk)
     signed_url_options = GCSPut::Signer.url_issuer_and_signer.merge(signed_url_options)
-    signed_post_url = gcs_file.signed_url(method: "POST", content_type: content_type, headers: {"x-goog-resumable" => "start"}, **signed_url_options)
-    with_signed_post_url(signed_post_url, content_type: content_type, transport: transport, **options, &blk)
+    signed_post_url = gcs_file.signed_url(method: "POST", content_type: content_type, headers: {"x-goog-resumable" => "start", **headers}, **signed_url_options)
+    with_signed_post_url(signed_post_url, content_type: content_type, transport: transport, headers: headers, **options, &blk)
   end
 
   # Starts a session from a signed POST URL (one with `x-goog-resumable: start` among its signed headers)
@@ -60,11 +62,13 @@ class GCSPut::ResumableUpload
   # @param signed_post_url[String]
   # @param content_type[String] must match the content type the URL was signed with
   # @param transport[#put, #post, #close] see `GCSPut::Transport`
+  # @param headers[Hash] extra headers to send with the session start, must match the ones the URL was signed with.
+  #   Only the session start needs them, chunks get uploaded without
   # @param options[Hash] see {#initialize}
   # @yield [GCSPut::ResumableUpload] the upload to write into
   # @return [GCSPut::ResumableUpload, Integer] the upload, or the total size when given a block
-  def self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk)
-    response = transport.post(URI(signed_post_url), "", {"Content-Type" => content_type, "x-goog-resumable" => "start"})
+  def self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, **options, &blk)
+    response = transport.post(URI(signed_post_url), "", {**headers, "Content-Type" => content_type, "x-goog-resumable" => "start"})
     unless response.status == 201
       raise GCSPut::UploadFailed.new("Session start responded with HTTP #{response.status}: #{response.body}", response: response)
     end

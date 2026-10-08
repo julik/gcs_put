@@ -233,6 +233,19 @@ class ResumableUploadSessionTest < Minitest::Test
     assert_requested(:put, SESSION_URL, headers: {"Content-Range" => "bytes 0-4/5", "Content-Type" => "text/plain"})
   end
 
+  def test_with_gcs_file_signs_and_sends_extra_headers_with_the_session_start_only
+    csek = {"x-goog-encryption-algorithm" => "AES256", "x-goog-encryption-key" => "a2V5", "x-goog-encryption-key-sha256" => "c2hh"}
+    stub_request(:post, SIGNED_POST_URL).with(headers: {"x-goog-resumable" => "start", **csek}).to_return(status: 201, headers: {"Location" => SESSION_URL})
+    stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
+
+    with_signer_options({}) do
+      GCSPut::ResumableUpload.with_gcs_file(gcs_file, headers: csek) { |io| io.write("hello") }
+    end
+
+    assert_equal({"x-goog-resumable" => "start", **csek}, gcs_file.signed_url_calls.first[:headers])
+    assert_requested(:put, SESSION_URL) { |request| (request.headers.keys.map(&:downcase) & csek.keys).empty? }
+  end
+
   def test_with_gcs_file_without_a_block_returns_an_upload_to_drive_by_hand
     stub_request(:post, SIGNED_POST_URL).to_return(status: 201, headers: {"Location" => SESSION_URL})
     stub_request(:put, SESSION_URL).to_return(status: 200, body: "{}")
@@ -290,6 +303,12 @@ class ResumableUploadSessionTest < Minitest::Test
     total = GCSPut::ResumableUpload.with_signed_post_url(SIGNED_POST_URL, content_type: "text/plain") { |io| io.write("hello") }
     assert_equal 5, total
     assert_requested(:put, SESSION_URL, headers: {"Content-Range" => "bytes 0-4/5", "Content-Type" => "text/plain"})
+  end
+
+  def test_with_signed_post_url_sends_extra_headers_with_the_session_start
+    stub_request(:post, SIGNED_POST_URL).with(headers: {"x-goog-resumable" => "start", "Content-Disposition" => "attachment"}).to_return(status: 201, headers: {"Location" => SESSION_URL})
+    GCSPut::ResumableUpload.with_signed_post_url(SIGNED_POST_URL, headers: {"Content-Disposition" => "attachment"})
+    assert_requested(:post, SIGNED_POST_URL)
   end
 
   def test_with_signed_post_url_without_a_block_returns_the_upload
