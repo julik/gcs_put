@@ -43,18 +43,25 @@ module GCSPut
   autoload :Signer, "gcs_put/signer"
   autoload :Transport, "gcs_put/transport"
 
-  # @!method self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk)
-  #   Shorthand for {GCSPut::ResumableUpload.with_gcs_file}
+  # @!method self.open_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, signed_url_options: {}, **options, &blk)
+  #   Shorthand for {GCSPut::ResumableUpload.open_gcs_file}
   #   @return [GCSPut::ResumableUpload, Integer]
-  # @!method self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk)
-  #   Shorthand for {GCSPut::ResumableUpload.with_signed_post_url}
+  # @!method self.open_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, **options, &blk)
+  #   Shorthand for {GCSPut::ResumableUpload.open_signed_post_url}
   #   @return [GCSPut::ResumableUpload, Integer]
+  # @!method self.resume_session(session_url, **options, &blk)
+  #   Shorthand for {GCSPut::ResumableUpload.resume_session}
+  #   @return [GCSPut::ResumableUpload, Integer]
+  # @!method self.with_gcs_file(gcs_file, **options, &blk)
+  #   @deprecated Use {open_gcs_file}
+  # @!method self.with_signed_post_url(signed_post_url, **options, &blk)
+  #   @deprecated Use {open_signed_post_url}
   # @!method self.with_session_url(session_url, **options, &blk)
-  #   Shorthand for {GCSPut::ResumableUpload.with_session_url}
-  #   @return [GCSPut::ResumableUpload, Integer]
+  #   @deprecated Use {resume_session}
   class << self
     extend Forwardable
 
+    def_delegators :"GCSPut::ResumableUpload", :open_gcs_file, :open_signed_post_url, :resume_session
     def_delegators :"GCSPut::ResumableUpload", :with_gcs_file, :with_signed_post_url, :with_session_url
   end
 end

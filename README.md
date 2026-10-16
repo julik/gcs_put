@@ -19,7 +19,7 @@ storage = Google::Cloud::Storage.new
 bucket = storage.bucket("my-bucket")
 gcs_file = bucket.file("exports/report.csv.gz", skip_lookup: true) # does not need to exist
 
-GCSPut.with_gcs_file(gcs_file, content_type: "application/gzip") do |io|
+GCSPut.open_gcs_file(gcs_file, content_type: "application/gzip") do |io|
   gz = Zlib::GzipWriter.new(io)
   rows.each { |row| gz.write(row.to_csv) }
   gz.finish
@@ -28,12 +28,12 @@ end
 
 The object yielded to the block responds to `write`, `<<` and `close`, so anything that writes to an IO can write to it, including `IO.copy_stream`, `Zlib::GzipWriter` and `ZipKit::Streamer`. The last chunk is sent when the block returns, or earlier if something closes the object, and the block form returns the total number of bytes uploaded. If the block raises, nothing is finalized and the session simply expires after a week.
 
-The factories live on `GCSPut::ResumableUpload` and are aliased on `GCSPut` for brevity. Everything except the file is optional. The content type defaults to `binary/octet-stream`, HTTP goes through `Net::HTTP`, and chunks are 5 MB.
+The factories live on `GCSPut::ResumableUpload` and are aliased on `GCSPut` for brevity. Everything except the file is optional. The content type defaults to `binary/octet-stream`, HTTP goes through `Net::HTTP`, and chunks are 5 MB. The names from before 0.3.0, `with_gcs_file`, `with_signed_post_url` and `with_session_url`, still work but are deprecated.
 
 Without a block you get the upload back to drive by hand:
 
 ```ruby
-upload = GCSPut.with_gcs_file(gcs_file)
+upload = GCSPut.open_gcs_file(gcs_file)
 upload.write(bytes)
 upload.finish # => total bytes
 ```
@@ -43,7 +43,7 @@ upload.finish # => total bytes
 Anything GCS takes from the session start, such as a customer-supplied encryption key, `Content-Disposition` or `x-goog-meta-*` metadata, goes in `headers:`. They get signed into the POST URL and sent with it. The chunks do not need them:
 
 ```ruby
-GCSPut.with_gcs_file(gcs_file, headers: {
+GCSPut.open_gcs_file(gcs_file, headers: {
   "x-goog-encryption-algorithm" => "AES256",
   "x-goog-encryption-key" => Base64.strict_encode64(key),
   "x-goog-encryption-key-sha256" => Digest::SHA256.base64digest(key)
@@ -52,14 +52,14 @@ GCSPut.with_gcs_file(gcs_file, headers: {
 end
 ```
 
-`with_signed_post_url` takes `headers:` too, and they must match the ones the URL was signed with.
+`open_signed_post_url` takes `headers:` too, and they must match the ones the URL was signed with.
 
 ### Chunk size
 
 Every chunk except the last is held in memory and must be a multiple of 256 KiB. The default is 5 MB. Larger chunks mean fewer requests:
 
 ```ruby
-GCSPut.with_gcs_file(gcs_file, chunk_size: 32 * 1024 * 1024)
+GCSPut.open_gcs_file(gcs_file, chunk_size: 32 * 1024 * 1024)
 ```
 
 ### Starting from a session URL
@@ -67,11 +67,11 @@ GCSPut.with_gcs_file(gcs_file, chunk_size: 32 * 1024 * 1024)
 The session URL is just a string, and once you have it uploading needs no Google credentials at all. So a web process can sign and start the session while a worker does the upload:
 
 ```ruby
-upload = GCSPut.with_gcs_file(gcs_file)
+upload = GCSPut.open_gcs_file(gcs_file)
 session_url = upload.session_url
 
 # Elsewhere, no SDK needed
-GCSPut.with_session_url(session_url) do |io|
+GCSPut.resume_session(session_url) do |io|
   io.write(bytes)
 end
 ```
@@ -79,7 +79,7 @@ end
 If you have a signed POST URL from somewhere else, one signed for `POST` with the `x-goog-resumable: start` header, start from that instead:
 
 ```ruby
-GCSPut.with_signed_post_url(signed_post_url) do |io|
+GCSPut.open_signed_post_url(signed_post_url) do |io|
   io.write(bytes)
 end
 ```
@@ -102,8 +102,8 @@ HTTP goes through a small transport object. The default uses `Net::HTTP` with on
 conn = Faraday.new { |f| f.options.timeout = 120 }
 transport = GCSPut::Transport::Faraday.new(conn)
 
-GCSPut.with_gcs_file(gcs_file, transport: transport) { |io| ... }
-GCSPut.with_session_url(session_url, transport: transport)
+GCSPut.open_gcs_file(gcs_file, transport: transport) { |io| ... }
+GCSPut.resume_session(session_url, transport: transport)
 ```
 
 Without an argument the Faraday transport makes a default connection. The `raise_error` middleware is tolerated. Timeouts and connection errors for `Net::HTTP` can be set on its transport too:
@@ -132,7 +132,7 @@ gcloud iam service-accounts add-iam-policy-binding SA_EMAIL \
   --role="roles/iam.serviceAccountTokenCreator"
 ```
 
-Without it, `with_gcs_file` fails with a permission error from the IAM API, not from Cloud Storage, which is confusing the first time. The background is in [google-cloud-ruby#13307](https://github.com/googleapis/google-cloud-ruby/issues/13307). The IAM Credentials API must also be enabled on the project.
+Without it, `open_gcs_file` fails with a permission error from the IAM API, not from Cloud Storage, which is confusing the first time. The background is in [google-cloud-ruby#13307](https://github.com/googleapis/google-cloud-ruby/issues/13307). The IAM Credentials API must also be enabled on the project.
 
 Extra options such as `expires:`, or an `issuer:` and `signer:` of your own, go in `signed_url_options:` and are passed through to `gcs_file.signed_url`.
 

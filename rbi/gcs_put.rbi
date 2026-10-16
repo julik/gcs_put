@@ -7,7 +7,7 @@ module GCSPut
   extend Forwardable
   CHUNK_SIZE_UNIT = T.let(256 * 1024, T.untyped)
   DEFAULT_CHUNK_SIZE = T.let(5 * 1024 * 1024, T.untyped)
-  VERSION = T.let("0.2.0", T.untyped)
+  VERSION = T.let("0.3.0", T.untyped)
 
   # Base class for everything the gem raises
   class Error < StandardError
@@ -229,7 +229,7 @@ module GCSPut
   # since it is the last PUT (with the total size filled in) which closes the GCS object.
   # 
   #   gcs_file = bucket.file("upload.bin", skip_lookup: true)
-  #   GCSPut.with_gcs_file(gcs_file) do |io|
+  #   GCSPut.open_gcs_file(gcs_file) do |io|
   #     io.write("Hello resumable")
   #     20.times { io.write(Random.bytes(1024 * 1024)) }
   #   end
@@ -289,7 +289,7 @@ module GCSPut
         blk: T.untyped
       ).returns(T.any(GCSPut::ResumableUpload, Integer))
     end
-    def self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, signed_url_options: {}, **options, &blk); end
+    def self.open_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, signed_url_options: {}, **options, &blk); end
 
     # sord duck - #put looks like a duck type, replacing with untyped
     # sord duck - #post looks like a duck type, replacing with untyped
@@ -319,7 +319,7 @@ module GCSPut
         blk: T.untyped
       ).returns(T.any(GCSPut::ResumableUpload, Integer))
     end
-    def self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, **options, &blk); end
+    def self.open_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, **options, &blk); end
 
     # Wraps an already started session. With a block, yields the upload, finishes it once
     # the block returns and returns the total size.
@@ -330,12 +330,12 @@ module GCSPut
     # 
     # _@return_ — the upload, or the total size when given a block
     sig { params(session_url: String, options: T::Hash[T.untyped, T.untyped]).returns(T.any(GCSPut::ResumableUpload, Integer)) }
-    def self.with_session_url(session_url, **options); end
+    def self.resume_session(session_url, **options); end
 
     # sord duck - #put looks like a duck type, replacing with untyped
     # sord duck - #post looks like a duck type, replacing with untyped
     # sord duck - #close looks like a duck type, replacing with untyped
-    # Prefer the `with_*` factories. This does no HTTP by itself, the first request goes out
+    # Prefer the `open_*` and `resume_session` factories. This does no HTTP by itself, the first request goes out
     # once a chunk fills up or `finish` gets called
     # 
     # _@param_ `session_url` — the `Location` returned by the session start

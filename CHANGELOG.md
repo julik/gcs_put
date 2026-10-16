@@ -1,3 +1,7 @@
+## 0.3.0
+
+- `with_gcs_file`, `with_signed_post_url` and `with_session_url` are now `open_gcs_file`, `open_signed_post_url` and `resume_session`, since they behave like `File.open`. The old names stay as deprecated aliases
+
 ## 0.2.0
 
 - `headers:` on `with_gcs_file` and `with_signed_post_url` for things the session start carries, such as customer-supplied encryption keys, `Content-Disposition` or `x-goog-meta-*` metadata

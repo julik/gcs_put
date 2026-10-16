@@ -6,7 +6,7 @@
 # since it is the last PUT (with the total size filled in) which closes the GCS object.
 #
 #   gcs_file = bucket.file("upload.bin", skip_lookup: true)
-#   GCSPut.with_gcs_file(gcs_file) do |io|
+#   GCSPut.open_gcs_file(gcs_file) do |io|
 #     io.write("Hello resumable")
 #     20.times { io.write(Random.bytes(1024 * 1024)) }
 #   end
@@ -49,10 +49,10 @@ class GCSPut::ResumableUpload
   # @param options[Hash] see {#initialize}
   # @yield [GCSPut::ResumableUpload] the upload to write into
   # @return [GCSPut::ResumableUpload, Integer] the upload, or the total size when given a block
-  def self.with_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, signed_url_options: {}, **options, &blk)
+  def self.open_gcs_file(gcs_file, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, signed_url_options: {}, **options, &blk)
     signed_url_options = GCSPut::Signer.url_issuer_and_signer.merge(signed_url_options)
     signed_post_url = gcs_file.signed_url(method: "POST", content_type: content_type, headers: {"x-goog-resumable" => "start", **headers}, **signed_url_options)
-    with_signed_post_url(signed_post_url, content_type: content_type, transport: transport, headers: headers, **options, &blk)
+    open_signed_post_url(signed_post_url, content_type: content_type, transport: transport, headers: headers, **options, &blk)
   end
 
   # Starts a session from a signed POST URL (one with `x-goog-resumable: start` among its signed headers)
@@ -67,13 +67,13 @@ class GCSPut::ResumableUpload
   # @param options[Hash] see {#initialize}
   # @yield [GCSPut::ResumableUpload] the upload to write into
   # @return [GCSPut::ResumableUpload, Integer] the upload, or the total size when given a block
-  def self.with_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, **options, &blk)
+  def self.open_signed_post_url(signed_post_url, content_type: "binary/octet-stream", transport: GCSPut::Transport::NetHTTP.new, headers: {}, **options, &blk)
     response = transport.post(URI(signed_post_url), "", {**headers, "Content-Type" => content_type, "x-goog-resumable" => "start"})
     unless response.status == 201
       raise GCSPut::UploadFailed.new("Session start responded with HTTP #{response.status}: #{response.body}", response: response)
     end
     session_url = response["Location"] or raise GCSPut::UploadFailed.new("Session start did not return a Location header", response: response)
-    with_session_url(session_url, content_type: content_type, transport: transport, **options, &blk)
+    resume_session(session_url, content_type: content_type, transport: transport, **options, &blk)
   end
 
   # Wraps an already started session. With a block, yields the upload, finishes it once
@@ -83,14 +83,23 @@ class GCSPut::ResumableUpload
   # @param options[Hash] see {#initialize}
   # @yield [GCSPut::ResumableUpload] the upload to write into
   # @return [GCSPut::ResumableUpload, Integer] the upload, or the total size when given a block
-  def self.with_session_url(session_url, **options)
+  def self.resume_session(session_url, **options)
     upload = new(session_url, **options)
     return upload unless block_given?
     yield(upload)
     upload.finish
   end
 
-  # Prefer the `with_*` factories. This does no HTTP by itself, the first request goes out
+  class << self
+    # @deprecated Use {open_gcs_file}
+    alias_method :with_gcs_file, :open_gcs_file
+    # @deprecated Use {open_signed_post_url}
+    alias_method :with_signed_post_url, :open_signed_post_url
+    # @deprecated Use {resume_session}
+    alias_method :with_session_url, :resume_session
+  end
+
+  # Prefer the `open_*` and `resume_session` factories. This does no HTTP by itself, the first request goes out
   # once a chunk fills up or `finish` gets called
   #
   # @param session_url[String] the `Location` returned by the session start

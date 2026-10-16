@@ -50,7 +50,7 @@ class LiveUploadTest < Minitest::Test
 
   def test_uploads_something_smaller_than_a_chunk
     gcs_file = new_file
-    GCSPut::ResumableUpload.with_gcs_file(gcs_file) { |io| io.write("Hello from a tiny resumable upload") }
+    GCSPut::ResumableUpload.open_gcs_file(gcs_file) { |io| io.write("Hello from a tiny resumable upload") }
 
     wait_until_exists(gcs_file)
     assert_equal "Hello from a tiny resumable upload", gcs_file.download.read
@@ -60,7 +60,7 @@ class LiveUploadTest < Minitest::Test
     rng = Random.new(Minitest.seed)
     gcs_file = new_file
     size = (5 * 1024 * 1024 + 1) * 2
-    GCSPut::ResumableUpload.with_gcs_file(gcs_file, content_type: "x-top-secret/binary") do |io|
+    GCSPut::ResumableUpload.open_gcs_file(gcs_file, content_type: "x-top-secret/binary") do |io|
       2.times { io.write(rng.bytes(5 * 1024 * 1024 + 1)) }
     end
 
@@ -77,7 +77,7 @@ class LiveUploadTest < Minitest::Test
       "x-goog-encryption-key-sha256" => Digest::SHA256.base64digest(key)
     }
     gcs_file = new_file
-    GCSPut::ResumableUpload.with_gcs_file(gcs_file, headers: csek) { |io| io.write("Hello from an encrypted upload") }
+    GCSPut::ResumableUpload.open_gcs_file(gcs_file, headers: csek) { |io| io.write("Hello from an encrypted upload") }
 
     wait_until_exists(gcs_file)
     assert_raises(Google::Cloud::Error) { gcs_file.download }
